@@ -16,7 +16,7 @@ from collections.abc import Iterable, Sequence
 from typing import Protocol
 
 from second_brain.domain.contracts import NoteDraft
-from second_brain.domain.models import Note, TraceEvent, Turn
+from second_brain.domain.models import Note, TraceEvent, Turn, SearchHit
 
 
 class ChatResponder(Protocol):
@@ -53,3 +53,23 @@ class TraceSink(Protocol):
     """Receives one event per observable step of a turn."""
 
     def emit(self, event: TraceEvent) -> None: ...
+
+class Embedder(Protocol):
+    """Text → vector; queries and documents share one space."""
+
+    @property
+    def dimensions(self) -> int: ...
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]: ...
+
+
+class NoteIndex(Protocol):
+    """Derived, rebuildable search index over the canonical store."""
+
+    def upsert(self, note: Note, embedding: Sequence[float]) -> None: ...
+
+    def dense_search(self, query_embedding: Sequence[float], k: int) -> list[SearchHit]: ...
+
+    def count(self) -> int: ...
+
+    def clear(self) -> None: ...    

@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # Cognitive task models, we might use a stronger model for segmentation.
     chat_model: str = "gpt-5-mini"
     segmenter_model: str = "gpt-5-mini"
+    embed_model: str = "text-embedding-3-large"
+    embed_dim: int = 1536  # Matryoshka truncation; SB_EMBED_DIM overrides
+
+    @property
+    def index_path(self) -> Path:
+        return self.data_dir / "index.db"
 
     # Storage layout. `data_dir` is the root; everything below derives from it.
     data_dir: Path = Path("data")

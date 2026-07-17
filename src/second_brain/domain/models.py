@@ -119,3 +119,9 @@ class SessionClosed(BaseModel):
 
 
 TurnResult = ChatReply | SaveAck | SessionClosed
+
+class SearchHit(BaseModel):
+    """One retrieval candidate. Cosine similarity; higher is better."""
+
+    note_id: str
+    score: float
