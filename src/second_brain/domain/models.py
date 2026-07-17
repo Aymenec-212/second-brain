@@ -111,3 +111,11 @@ class SaveAck(BaseModel):
 
 
 TurnResult = ChatReply | SaveAck
+
+class SessionClosed(BaseModel):
+    """Final ingestion happened; the session accepts no more turns."""
+
+    notes: list[Note]
+
+
+TurnResult = ChatReply | SaveAck | SessionClosed
