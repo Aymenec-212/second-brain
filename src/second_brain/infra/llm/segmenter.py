@@ -58,12 +58,12 @@ def render_transcript(turns: Sequence[Turn]) -> str:
     return "\n".join(f"[{t.index}] {t.role.value}: {t.content}" for t in turns)
 
 
-def check_spans(drafts: Sequence[NoteDraft], max_index: int) -> None:
+def check_spans(drafts: Sequence[NoteDraft], min_index: int, max_index: int) -> None:
     for draft in drafts:
-        if draft.end_turn > max_index:
+        if draft.start_turn < min_index or draft.end_turn > max_index:
             raise InvalidSegmentation(
-                f"note '{draft.title}' spans up to turn {draft.end_turn}, "
-                f"but the transcript ends at turn {max_index}"
+                f"note '{draft.title}' spans turns {draft.start_turn}-{draft.end_turn}, "
+                f"but this transcript window covers turns {min_index}-{max_index}"
             )
 
 
@@ -77,6 +77,7 @@ class OpenAISegmenter:
     def segment(self, turns: Sequence[Turn]) -> list[NoteDraft]:
         if not turns:
             return []
+        min_index = min(t.index for t in turns)
         max_index = max(t.index for t in turns)
         messages: list[dict[str, str]] = [
             {"role": "system", "content": _SYSTEM_PROMPT},
@@ -93,7 +94,7 @@ class OpenAISegmenter:
                 parsed = completion.choices[0].message.parsed
                 if parsed is None:
                     raise InvalidSegmentation("empty or refused output")
-                check_spans(parsed.notes, max_index)
+                check_spans(parsed.notes, min_index, max_index)
                 return parsed.notes
             except (ValidationError, InvalidSegmentation) as exc:
                 last_error = str(exc)

@@ -71,7 +71,7 @@ def test_render_transcript_shows_absolute_indices() -> None:
 
 def test_check_spans_rejects_out_of_range() -> None:
     with pytest.raises(InvalidSegmentation):
-        check_spans([draft(end_turn=99)], max_index=2)
+        check_spans([draft(end_turn=99)], min_index=0, max_index=2)
 
 
 def test_valid_segmentation_returns_first_try() -> None:
@@ -105,3 +105,9 @@ def test_empty_transcript_yields_no_notes_and_no_call() -> None:
     client, stub = stub_client([])
     assert OpenAISegmenter(client, model="test-model").segment([]) == []
     assert stub.requests == []
+
+def test_check_spans_rejects_out_of_window() -> None:
+    with pytest.raises(InvalidSegmentation):
+        check_spans([draft(end_turn=99)], min_index=0, max_index=2)
+    with pytest.raises(InvalidSegmentation):
+        check_spans([draft()], min_index=1, max_index=2)  # claims turn 0, window starts at 1
