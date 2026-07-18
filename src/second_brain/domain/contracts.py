@@ -89,4 +89,22 @@ class AnswerDraft(BaseModel):
     )
     grounded: bool = Field(
         description="False when the provided notes do not contain the answer"
+    )
+
+class NoteEnrichment(BaseModel):
+    """Write-time enrichment: bridges the surface-form gap and gives the
+    lexical leg cross-lingual reach."""
+
+    gist_en: NonEmptyStr = Field(
+        description=(
+            "2-4 sentence English summary of the note, whatever its language. "
+            "Keep every number, name, and date; translate faithfully."
+        )
+    )
+    questions: list[NonEmptyStr] = Field(
+        description=(
+            "3-6 short English questions this note answers, phrased the way "
+            "the owner might ask months later"
+        ),
+        max_length=8,
     )    

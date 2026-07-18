@@ -31,6 +31,7 @@ from second_brain.infra.llm.answerer import OpenAIAnswerer
 from second_brain.infra.llm.chat import OpenAIChatResponder
 from second_brain.infra.llm.embeddings import OpenAIEmbedder
 from second_brain.infra.llm.segmenter import OpenAISegmenter
+from second_brain.infra.llm.enricher import OpenAIEnricher
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.infra.trace.jsonl import JsonlTraceSink
@@ -63,6 +64,7 @@ def _build_runtime(settings: Settings, client: OpenAI) -> SessionRuntime:
         traces=JsonlTraceSink(settings.traces_dir),
         embedder=OpenAIEmbedder(client, settings.embed_model, settings.embed_dim),
         index=SqliteNoteIndex(settings.index_path, settings.embed_dim),
+        enricher=OpenAIEnricher(client, settings.chat_model),
     )
 
 
@@ -159,10 +161,11 @@ def reindex() -> None:
     repo = MarkdownNoteRepository(settings.notes_dir)
     index = SqliteNoteIndex(settings.index_path, settings.embed_dim)
     embedder = OpenAIEmbedder(client, settings.embed_model, settings.embed_dim)
+    enricher = OpenAIEnricher(client, settings.chat_model)
     with console.status("reindexing from Markdown…"):
         notes = list(repo.iter_all())
         index.clear()
-        index_notes(notes, embedder=embedder, index=index)
+        index_notes(notes, embedder=embedder, index=index, enricher=enricher)
     console.print(f"[green]Reindexed {len(notes)} notes.[/green]")
 
 
@@ -182,6 +185,7 @@ def seed(limit: int = typer.Option(0, help="Only the first N sessions (0 = all)"
         segmenter=OpenAISegmenter(client, settings.segmenter_model),
         embedder=OpenAIEmbedder(client, settings.embed_model, settings.embed_dim),
         index=SqliteNoteIndex(settings.index_path, settings.embed_dim),
+        enricher=OpenAIEnricher(client, settings.chat_model),
     )
     for line in progress:
         console.print(line)

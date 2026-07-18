@@ -17,6 +17,7 @@ from second_brain.domain.ingestion import ingest_session
 from second_brain.domain.models import NonEmptyStr, Role, Turn
 from second_brain.domain.ports import (
     Embedder,
+    Enricher,
     NoteIndex,
     NoteRepository,
     Segmenter,
@@ -115,6 +116,7 @@ def run_seed(
     segmenter: Segmenter,
     embedder: Embedder,
     index: NoteIndex,
+    enricher: Enricher,
 ) -> Iterator[str]:
     """Resumable: existing transcripts skip generation; the watermark makes
     re-ingestion a no-op. Crash mid-seed, run again, nothing duplicates."""
@@ -135,7 +137,7 @@ def run_seed(
             created_at=brief.date,
         )
         if notes:
-            index_notes(notes, embedder=embedder, index=index)
+            index_notes(notes, embedder=embedder, index=index, enricher=enricher)
         status = "generated" if generated else "resumed"
         yield (
             f"[{position}/{len(briefs)}] {brief.date.date()} "

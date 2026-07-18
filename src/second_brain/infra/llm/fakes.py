@@ -10,8 +10,8 @@ import hashlib
 import math
 from collections.abc import Sequence
 
-from second_brain.domain.contracts import NoteDraft
-from second_brain.domain.models import Language, NoteType, Turn
+from second_brain.domain.contracts import NoteDraft, NoteEnrichment
+from second_brain.domain.models import Language, Note, NoteType, Turn
 
 
 class FakeChatResponder:
@@ -82,3 +82,24 @@ class FakeEmbedder:
             vec[0] = 1.0
             norm = 1.0
         return [v / norm for v in vec]
+
+
+class FakeEnricher:
+    """Derives a trivial enrichment, or replays presets keyed by note id.
+
+    Presets exist so cross-lingual lexical tests can plant a known English
+    shadow for a French note.
+    """
+
+    def __init__(self, presets: dict[str, NoteEnrichment] | None = None) -> None:
+        self._presets = presets or {}
+        self.calls: list[str] = []
+
+    def enrich(self, note: Note) -> NoteEnrichment:
+        self.calls.append(note.id)
+        if note.id in self._presets:
+            return self._presets[note.id]
+        return NoteEnrichment(
+            gist_en=f"English gist of: {note.title}",
+            questions=[f"What did I note about {note.title}?"],
+        )

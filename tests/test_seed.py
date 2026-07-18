@@ -12,7 +12,7 @@ from ulid import ULID
 from second_brain.domain.ingestion import ingest_session
 from second_brain.domain.models import Language, Role, Turn
 from second_brain.infra.index.sqlite import SqliteNoteIndex
-from second_brain.infra.llm.fakes import FakeEmbedder, FakeSegmenter
+from second_brain.infra.llm.fakes import FakeEmbedder, FakeSegmenter, FakeEnricher
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.seed.generate import SyntheticSession, run_seed
@@ -87,6 +87,7 @@ def test_run_seed_is_resumable_without_regenerating(tmp_path: Path) -> None:
         "segmenter": FakeSegmenter(),
         "embedder": embedder,
         "index": SqliteNoteIndex(tmp_path / "index.db", embedder.dimensions),
+        "enricher": FakeEnricher(),
     }
     first = list(run_seed(briefs, synthesize=stub_synthesize, **deps))
     assert len(calls) == 3

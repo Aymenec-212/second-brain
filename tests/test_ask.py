@@ -18,7 +18,7 @@ from second_brain.domain.models import Language, Note, NoteType, SourceSpan
 from second_brain.domain.retrieval import index_notes
 from second_brain.infra.index.sqlite import SqliteNoteIndex
 from second_brain.infra.llm.answerer import InvalidAnswer, check_citations
-from second_brain.infra.llm.fakes import FakeEmbedder
+from second_brain.infra.llm.fakes import FakeEmbedder, FakeEnricher
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.trace.jsonl import JsonlTraceSink
 
@@ -60,7 +60,7 @@ def seeded(tmp_path: Path) -> tuple[FakeEmbedder, SqliteNoteIndex, MarkdownNoteR
     ]
     for note in notes:
         repo.save(note)
-    index_notes(notes, embedder=embedder, index=index)
+    index_notes(notes, embedder=embedder, index=index, enricher=FakeEnricher())
     return embedder, index, repo
 
 
@@ -104,7 +104,7 @@ def test_sources_map_only_to_cited_notes(tmp_path: Path) -> None:
 def test_index_repo_drift_is_skipped(tmp_path: Path) -> None:
     embedder, index, repo = seeded(tmp_path)
     ghost = make_note("01ZRZ3NDEKTSV4RRFFQ69G5FAZ", "Ghost note", "Indexed but not on disk.")
-    index_notes([ghost], embedder=embedder, index=index)  # index only, never repo.save
+    index_notes([ghost], embedder=embedder, index=index, enricher=FakeEnricher())  # index only, never repo.save
     stub = StubAnswerer(AnswerDraft(answer="ok", cited_note_ids=[SQLITE_ID], grounded=True))
     answer_question(
         "ghost note indexed on disk",

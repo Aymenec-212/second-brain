@@ -22,6 +22,7 @@ from second_brain.domain.ports import (
     Segmenter,
     TraceSink,
     TranscriptStore,
+    Enricher,
 )
 from second_brain.domain.retrieval import index_notes
 
@@ -37,6 +38,7 @@ class SessionRuntime:
         traces: TraceSink,
         embedder: Embedder,
         index: NoteIndex,
+        enricher: Enricher,
     ) -> None:
         self._responder = responder
         self._segmenter = segmenter
@@ -45,6 +47,7 @@ class SessionRuntime:
         self._traces = traces
         self._embedder = embedder
         self._index = index
+        self._enricher = enricher
         self.session_id = new_id()
         self._history: list[Turn] = []
         self._next_index = 0
@@ -74,7 +77,7 @@ class SessionRuntime:
         self._emit("ingestion_completed", trigger=trigger, note_ids=[n.id for n in notes])
         if notes:
             try:
-                index_notes(notes, embedder=self._embedder, index=self._index)
+                index_notes(notes, embedder=self._embedder, index=self._index, enricher=self._enricher)
                 self._emit("notes_indexed", count=len(notes))
             except Exception as exc:  # noqa: BLE001 — canonical write already succeeded
                 self._emit("indexing_failed", error=str(exc))

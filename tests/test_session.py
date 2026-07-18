@@ -11,7 +11,7 @@ import pytest
 from second_brain.app.session import SessionRuntime
 from second_brain.app.turns import handle_turn
 from second_brain.domain.models import ChatReply, SaveAck, SessionClosed, TraceEvent, Turn
-from second_brain.infra.llm.fakes import FakeChatResponder, FakeSegmenter, FakeEmbedder
+from second_brain.infra.llm.fakes import FakeChatResponder, FakeSegmenter, FakeEmbedder, FakeEnricher
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.infra.trace.jsonl import JsonlTraceSink
@@ -37,6 +37,7 @@ class Deps:
             repo=self.repo,
             transcripts=self.transcripts,
             traces=JsonlTraceSink(self.traces_dir),
+            enricher=FakeEnricher(),
         )
 
 
@@ -67,6 +68,7 @@ def test_user_turn_hits_disk_before_the_model(tmp_path: Path) -> None:
         repo=MarkdownNoteRepository(tmp_path / "notes"),
         transcripts=transcripts,
         traces=JsonlTraceSink(tmp_path / "traces"),
+        enricher=FakeEnricher(),
     )
     probe.session_id = runtime.session_id
     handle_turn(runtime, "an idea worth keeping")

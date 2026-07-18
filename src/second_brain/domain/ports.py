@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
-from second_brain.domain.contracts import NoteDraft, AnswerDraft
+from second_brain.domain.contracts import NoteDraft, AnswerDraft, NoteEnrichment
 from second_brain.domain.models import Note, TraceEvent, Turn, SearchHit
 
 
@@ -66,9 +66,13 @@ class Embedder(Protocol):
 class NoteIndex(Protocol):
     """Derived, rebuildable search index over the canonical store."""
 
-    def upsert(self, note: Note, embedding: Sequence[float]) -> None: ...
+    def upsert(self, note: Note, embedding: Sequence[float], enrichment: NoteEnrichment) -> None: ...
 
     def dense_search(self, query_embedding: Sequence[float], k: int) -> list[SearchHit]: ...
+
+    def lexical_search(self, query: str, k: int) -> list[SearchHit]: ...
+
+    def cached_enrichment(self, note: Note) -> NoteEnrichment | None: ...
 
     def count(self) -> int: ...
 
@@ -78,3 +82,8 @@ class Answerer(Protocol):
     """Cognitive task: answer a question from retrieved notes only."""
 
     def answer(self, question: str, notes: Sequence[Note]) -> AnswerDraft: ...
+
+class Enricher(Protocol):
+    """Cognitive task: produce retrieval enrichment for one note."""
+
+    def enrich(self, note: Note) -> NoteEnrichment: ...

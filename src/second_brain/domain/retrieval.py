@@ -1,16 +1,18 @@
 """Read-path policy and write-side indexing.
 
-Phase 2: what text represents a note in the dense space, and how a batch
-of notes enters the index. The retrieval funnel (lexical leg, fusion,
-rerank, gate) grows here in Phase 3.
+Phase 2 gave this module the dense representation; Phase 3 adds the
+enrichment step of the write path. The dense text deliberately does NOT
+change with enrichment — keeping it fixed is what lets the eval compare
+baseline vs hybrid without confounds.
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Sequence
 
 from second_brain.domain.models import Note
-from second_brain.domain.ports import Embedder, NoteIndex
+from second_brain.domain.ports import Embedder, Enricher, NoteIndex
 
 
 def embedding_text(note: Note) -> str:
@@ -19,11 +21,30 @@ def embedding_text(note: Note) -> str:
     return f"{note.title}\n\n{note.body}"
 
 
-def index_notes(notes: Sequence[Note], *, embedder: Embedder, index: NoteIndex) -> None:
-    """Embed and upsert a batch of notes. One embedding request per batch,
-    not per note — seed and reindex push hundreds through here."""
+def content_hash(note: Note) -> str:
+    """What the enrichment cache keys on: if title+body are unchanged,
+    the cached enrichment is still valid."""
+    return hashlib.md5(f"{note.title}\n{note.body}".encode("utf-8")).hexdigest()
+
+
+def index_notes(
+    notes: Sequence[Note],
+    *,
+    enricher: Enricher,
+    embedder: Embedder,
+    index: NoteIndex,
+) -> None:
+    """Enrich (cache-first), embed (one batch), upsert.
+
+    Enrichment is the only per-note model call on this path, and the cache
+    makes it a one-time cost per note content — `sb reindex` re-pays only
+    the embeddings, which arrive in a single batched request.
+    """
     if not notes:
         return
+    enrichments = [
+        index.cached_enrichment(note) or enricher.enrich(note) for note in notes
+    ]
     vectors = embedder.embed([embedding_text(note) for note in notes])
-    for note, vector in zip(notes, vectors, strict=True):
-        index.upsert(note, vector)
+    for note, vector, enrichment in zip(notes, vectors, enrichments, strict=True):
+        index.upsert(note, vector, enrichment)
