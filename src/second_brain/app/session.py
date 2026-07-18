@@ -4,6 +4,10 @@ A SessionRuntime owns one live session. It persists every conversational
 turn to the transcript *before* the model sees it, keeps the in-memory
 history the chat prompt needs, and funnels /save, close, Ctrl-C, and
 crash re-runs through the single ingest_session path.
+
+Write ordering: canonical Markdown first, index second and best-effort.
+An indexing failure (network, provider outage) is traced and swallowed —
+thinking is never lost to an outage, and `sb reindex` heals the drift.
 """
 
 from __future__ import annotations
@@ -12,11 +16,14 @@ from second_brain.domain.ingestion import ingest_session
 from second_brain.domain.models import Note, Role, TraceEvent, Turn, new_id
 from second_brain.domain.ports import (
     ChatResponder,
+    Embedder,
+    NoteIndex,
     NoteRepository,
     Segmenter,
     TraceSink,
     TranscriptStore,
 )
+from second_brain.domain.retrieval import index_notes
 
 
 class SessionRuntime:
@@ -28,12 +35,16 @@ class SessionRuntime:
         repo: NoteRepository,
         transcripts: TranscriptStore,
         traces: TraceSink,
+        embedder: Embedder,
+        index: NoteIndex,
     ) -> None:
         self._responder = responder
         self._segmenter = segmenter
         self._repo = repo
         self._transcripts = transcripts
         self._traces = traces
+        self._embedder = embedder
+        self._index = index
         self.session_id = new_id()
         self._history: list[Turn] = []
         self._next_index = 0
@@ -61,6 +72,12 @@ class SessionRuntime:
             segmenter=self._segmenter,
         )
         self._emit("ingestion_completed", trigger=trigger, note_ids=[n.id for n in notes])
+        if notes:
+            try:
+                index_notes(notes, embedder=self._embedder, index=self._index)
+                self._emit("notes_indexed", count=len(notes))
+            except Exception as exc:  # noqa: BLE001 — canonical write already succeeded
+                self._emit("indexing_failed", error=str(exc))
         return notes
 
     def close(self) -> list[Note]:

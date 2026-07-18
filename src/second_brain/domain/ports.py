@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
-from second_brain.domain.contracts import NoteDraft
+from second_brain.domain.contracts import NoteDraft, AnswerDraft
 from second_brain.domain.models import Note, TraceEvent, Turn, SearchHit
 
 
@@ -72,4 +72,9 @@ class NoteIndex(Protocol):
 
     def count(self) -> int: ...
 
-    def clear(self) -> None: ...    
+    def clear(self) -> None: ...
+
+class Answerer(Protocol):
+    """Cognitive task: answer a question from retrieved notes only."""
+
+    def answer(self, question: str, notes: Sequence[Note]) -> AnswerDraft: ...

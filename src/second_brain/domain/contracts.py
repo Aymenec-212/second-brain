@@ -76,3 +76,17 @@ class SegmentationResult(BaseModel):
        OpenAI's structured outputs require a root object"""
 
     notes: list[NoteDraft] = Field(default_factory=list)
+
+class AnswerDraft(BaseModel):
+    """The answerer's proposal: an answer grounded in the provided notes."""
+
+    answer: NonEmptyStr = Field(
+        description="Answer in the language of the question, drawn from the notes only"
+    )
+    cited_note_ids: list[str] = Field(
+        default_factory=list,
+        description="Ids of the notes the answer draws on; empty when not grounded",
+    )
+    grounded: bool = Field(
+        description="False when the provided notes do not contain the answer"
+    )    

@@ -125,3 +125,10 @@ class SearchHit(BaseModel):
 
     note_id: str
     score: float
+
+class Answer(BaseModel):
+    """v0 ask result. Phase 3 adds the score gate and hedged/abstention forms."""
+
+    text: str
+    sources: list[Note]
+    grounded: bool    

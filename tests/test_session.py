@@ -11,10 +11,11 @@ import pytest
 from second_brain.app.session import SessionRuntime
 from second_brain.app.turns import handle_turn
 from second_brain.domain.models import ChatReply, SaveAck, SessionClosed, TraceEvent, Turn
-from second_brain.infra.llm.fakes import FakeChatResponder, FakeSegmenter
+from second_brain.infra.llm.fakes import FakeChatResponder, FakeSegmenter, FakeEmbedder
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.infra.trace.jsonl import JsonlTraceSink
+from second_brain.infra.index.sqlite import SqliteNoteIndex
 
 
 class Deps:
@@ -26,9 +27,13 @@ class Deps:
         self.traces_dir = tmp_path / "traces"
         self.responder = FakeChatResponder()
         self.segmenter = FakeSegmenter()
+        self.embedder = FakeEmbedder()
+        self.index = SqliteNoteIndex(tmp_path / "index.db", self.embedder.dimensions)
         self.runtime = SessionRuntime(
             responder=self.responder,
             segmenter=self.segmenter,
+            embedder=self.embedder,
+            index=self.index,
             repo=self.repo,
             transcripts=self.transcripts,
             traces=JsonlTraceSink(self.traces_dir),
@@ -52,9 +57,13 @@ class DiskProbeResponder:
 def test_user_turn_hits_disk_before_the_model(tmp_path: Path) -> None:
     transcripts = JsonlTranscriptStore(tmp_path / "transcripts")
     probe = DiskProbeResponder(transcripts)
+    embedder = FakeEmbedder()
+    index = SqliteNoteIndex(tmp_path / "index.db", embedder.dimensions)
     runtime = SessionRuntime(
         responder=probe,
         segmenter=FakeSegmenter(),
+        embedder=embedder,
+        index=index,
         repo=MarkdownNoteRepository(tmp_path / "notes"),
         transcripts=transcripts,
         traces=JsonlTraceSink(tmp_path / "traces"),
@@ -72,6 +81,8 @@ def test_save_mid_session_ingests_the_window(tmp_path: Path) -> None:
     assert len(result.notes) == 1
     span = result.notes[0].source
     assert (span.start_turn, span.end_turn) == (0, 1)
+    #verifies the index was updated with the new note
+    assert deps.index.count() == 1
 
 
 def test_close_ingests_only_the_remainder(tmp_path: Path) -> None:
@@ -125,6 +136,7 @@ def test_session_leaves_a_complete_trace(tmp_path: Path) -> None:
         "turn_received",
         "reply_sent",
         "ingestion_completed",
+        "notes_indexed",
         "session_closed",
     ]
 

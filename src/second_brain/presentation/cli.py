@@ -12,11 +12,23 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
+from second_brain.app.ask import answer_question
 from second_brain.app.session import SessionRuntime
 from second_brain.app.turns import handle_turn
-from second_brain.config import get_settings
-from second_brain.domain.models import ChatReply, Note, SaveAck, SessionClosed, TurnResult
+from second_brain.config import Settings, get_settings
+from second_brain.domain.models import (
+    Answer,
+    ChatReply,
+    Note,
+    SaveAck,
+    SessionClosed,
+    TurnResult,
+)
+from second_brain.domain.retrieval import index_notes
+from second_brain.infra.index.sqlite import SqliteNoteIndex
+from second_brain.infra.llm.answerer import OpenAIAnswerer
 from second_brain.infra.llm.chat import OpenAIChatResponder
+from second_brain.infra.llm.embeddings import OpenAIEmbedder
 from second_brain.infra.llm.segmenter import OpenAISegmenter
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.store.transcripts import JsonlTranscriptStore
@@ -25,25 +37,28 @@ from second_brain.infra.trace.jsonl import JsonlTraceSink
 app = typer.Typer(help="Second brain — a personal memory assistant.")
 console = Console()
 
+
 @app.callback()
 def main() -> None:
     """Second brain — a personal memory assistant."""
-    pass
 
 
-
-def _build_runtime() -> SessionRuntime:
-    settings = get_settings()
+def _client(settings: Settings) -> OpenAI:
     if settings.openai_api_key is None:
         console.print("[red]OPENAI_API_KEY is not set — add it to .env[/red]")
         raise typer.Exit(code=1)
-    client = OpenAI(api_key=settings.openai_api_key.get_secret_value())
+    return OpenAI(api_key=settings.openai_api_key.get_secret_value())
+
+
+def _build_runtime(settings: Settings, client: OpenAI) -> SessionRuntime:
     return SessionRuntime(
         responder=OpenAIChatResponder(client, settings.chat_model),
         segmenter=OpenAISegmenter(client, settings.segmenter_model),
         repo=MarkdownNoteRepository(settings.notes_dir),
         transcripts=JsonlTranscriptStore(settings.transcripts_dir),
         traces=JsonlTraceSink(settings.traces_dir),
+        embedder=OpenAIEmbedder(client, settings.embed_model, settings.embed_dim),
+        index=SqliteNoteIndex(settings.index_path, settings.embed_dim),
     )
 
 
@@ -67,10 +82,30 @@ def _render(result: TurnResult) -> None:
             )
 
 
+def _render_answer(answer: Answer) -> None:
+    if not answer.grounded:
+        console.print(
+            Panel(
+                answer.text or "Nothing in your notes covers this yet.",
+                title="not in your notes",
+                border_style="yellow",
+            )
+        )
+        return
+    console.print()
+    console.print(Markdown(answer.text))
+    sources = "\n".join(
+        f"• {note.title}  [dim]— {note.created_at.date()} · {note.id}[/dim]"
+        for note in answer.sources
+    )
+    console.print(Panel(sources, title="sources", border_style="blue"))
+
+
 @app.command()
 def chat() -> None:
     """Open a thinking session. /save ingests now, /quit closes."""
-    runtime = _build_runtime()
+    settings = get_settings()
+    runtime = _build_runtime(settings, _client(settings))
     console.print(
         Panel(
             f"session [bold]{runtime.session_id}[/bold]\n"
@@ -93,6 +128,38 @@ def chat() -> None:
         # and the happy path are one code path.
         console.print()
         _render(SessionClosed(notes=runtime.close()))
+
+
+@app.command()
+def ask(question: str, k: int = typer.Option(5, help="Candidates to retrieve")) -> None:
+    """Ask your notes a question — from a fresh process, no session needed."""
+    settings = get_settings()
+    client = _client(settings)
+    answer = answer_question(
+        question,
+        embedder=OpenAIEmbedder(client, settings.embed_model, settings.embed_dim),
+        index=SqliteNoteIndex(settings.index_path, settings.embed_dim),
+        repo=MarkdownNoteRepository(settings.notes_dir),
+        answerer=OpenAIAnswerer(client, settings.chat_model),
+        traces=JsonlTraceSink(settings.traces_dir),
+        k=k,
+    )
+    _render_answer(answer)
+
+
+@app.command()
+def reindex() -> None:
+    """Rebuild the derived index from the canonical Markdown store."""
+    settings = get_settings()
+    client = _client(settings)
+    repo = MarkdownNoteRepository(settings.notes_dir)
+    index = SqliteNoteIndex(settings.index_path, settings.embed_dim)
+    embedder = OpenAIEmbedder(client, settings.embed_model, settings.embed_dim)
+    with console.status("reindexing from Markdown…"):
+        notes = list(repo.iter_all())
+        index.clear()
+        index_notes(notes, embedder=embedder, index=index)
+    console.print(f"[green]Reindexed {len(notes)} notes.[/green]")
 
 
 if __name__ == "__main__":
