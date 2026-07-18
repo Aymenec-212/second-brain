@@ -30,6 +30,10 @@ user and an assistant.
 Segmentation rules:
 - One note per distinct idea, decision, fact-cluster, task, or personal
   log entry.
+- Write each note as the user's own memory, in a neutral voice: capture
+  the substance directly — facts, criteria, decisions, open questions,
+  next steps. Never narrate the dialogue ("the assistant asked…",
+  "the user said…"); the conversation is scaffolding, not content.  
 - A note's body is distilled but detailed prose, roughly 150-500 words:
   preserve decisions, reasoning, open questions, concrete numbers, names,
   and any phrasing that matters. Drop filler and repetition.

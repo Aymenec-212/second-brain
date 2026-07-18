@@ -12,9 +12,10 @@ same path through ingest_session, which is a no-op when nothing is pending.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from second_brain.domain.contracts import NoteDraft
-from second_brain.domain.models import Note, Role, SourceSpan, Turn
+from second_brain.domain.models import Note, Role, SourceSpan, Turn, new_id, utc_now
 from second_brain.domain.ports import NoteRepository, Segmenter
 
 
@@ -33,10 +34,12 @@ def ingested_watermark(repo: NoteRepository, session_id: str) -> int:
     return max(ends, default=-1)
 
 
-def materialize(draft: NoteDraft, session_id: str) -> Note:
+def materialize(draft: NoteDraft, session_id: str, created_at: datetime | None = None) -> Note:
     """Draft → Note. Identity (id, created_at) and provenance (SourceSpan)
     are assigned here, by the domain — never by the model."""
     return Note(
+        id=new_id(at=created_at),
+        created_at=created_at if created_at is not None else utc_now(),
         title=draft.title,
         language=draft.language,
         type=draft.type,
@@ -57,6 +60,7 @@ def ingest_session(
     turns: Sequence[Turn],
     repo: NoteRepository,
     segmenter: Segmenter,
+    created_at: datetime | None = None,
 ) -> list[Note]:
     """Segment and persist everything not yet ingested; return the new notes.
 
@@ -74,7 +78,7 @@ def ingest_session(
         return []
     drafts = segmenter.segment(pending)
     notes = sorted(
-        (materialize(d, session_id) for d in drafts),
+        (materialize(d, session_id, created_at=created_at) for d in drafts),
         key=lambda n: n.source.end_turn,
     )
     for note in notes:

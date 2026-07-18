@@ -5,6 +5,7 @@ the core decides *what* happened, presentation decides *how* to show it.
 """
 
 from __future__ import annotations
+from functools import partial
 
 import typer
 from openai import OpenAI
@@ -33,6 +34,9 @@ from second_brain.infra.llm.segmenter import OpenAISegmenter
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.infra.trace.jsonl import JsonlTraceSink
+
+from second_brain.seed.generate import run_seed, synthesize_openai
+from second_brain.seed.spec import PERSONA, all_briefs
 
 app = typer.Typer(help="Second brain — a personal memory assistant.")
 console = Console()
@@ -161,6 +165,27 @@ def reindex() -> None:
         index_notes(notes, embedder=embedder, index=index)
     console.print(f"[green]Reindexed {len(notes)} notes.[/green]")
 
+
+@app.command()
+def seed(limit: int = typer.Option(0, help="Only the first N sessions (0 = all)")) -> None:
+    """Populate the store with the synthetic persona — through real ingestion."""
+    settings = get_settings()
+    client = _client(settings)
+    briefs = all_briefs()
+    if limit:
+        briefs = briefs[:limit]
+    progress = run_seed(
+        briefs,
+        synthesize=partial(synthesize_openai, client, settings.chat_model, PERSONA),
+        transcripts=JsonlTranscriptStore(settings.transcripts_dir),
+        repo=MarkdownNoteRepository(settings.notes_dir),
+        segmenter=OpenAISegmenter(client, settings.segmenter_model),
+        embedder=OpenAIEmbedder(client, settings.embed_model, settings.embed_dim),
+        index=SqliteNoteIndex(settings.index_path, settings.embed_dim),
+    )
+    for line in progress:
+        console.print(line)
+    console.print(f"[green]Store now holds {SqliteNoteIndex(settings.index_path, settings.embed_dim).count()} indexed notes.[/green]")
 
 if __name__ == "__main__":
     app()

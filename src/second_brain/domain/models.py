@@ -21,9 +21,9 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def new_id() -> str:
-    """ULIDs are time-sortable: chronology for free in filenames and range scans."""
-    return str(ULID())
+def new_id(at: datetime | None = None) -> str:
+    """ULIDs are time-sortable. `at` lets seeded data mint ids from simulated time."""
+    return str(ULID.from_datetime(at)) if at is not None else str(ULID())
 
 
 class Role(StrEnum):
