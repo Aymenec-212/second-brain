@@ -113,4 +113,9 @@ class Reranker(Protocol):
 class WebSearcher(Protocol):
     """Answer from the live web; presentation must mark it as such."""
 
-    def search(self, question: str) -> WebAnswer: ...       
+    def search(self, question: str) -> WebAnswer: ...
+
+class Transcriber(Protocol):
+    """Speech → text. Presentation captures audio; the core never knows."""
+
+    def transcribe(self, audio_wav: bytes) -> str: ...    

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     segmenter_model: str = "gpt-5-mini"
     embed_model: str = "text-embedding-3-large"
     embed_dim: int = 1536  # Matryoshka truncation; SB_EMBED_DIM overrides
+    voice_model: str = "whisper-large-v3"
 
     # Retrieval funnel (thresholds provisional until Phase 3 calibration)
     rerank_model: str = "BAAI/bge-reranker-v2-m3"

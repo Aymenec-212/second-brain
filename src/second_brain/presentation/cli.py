@@ -2,6 +2,8 @@
 
 The only place adapters meet ports. Rendering matches on result type:
 the core decides *what* happened, presentation decides *how* to show it.
+Voice is intercepted here, before the core ever sees the turn — a spoken
+turn enters handle_turn as plain text, indistinguishable from typing.
 """
 
 from __future__ import annotations
@@ -9,6 +11,7 @@ from __future__ import annotations
 from functools import partial
 
 import typer
+from groq import Groq
 from openai import OpenAI
 from rich.console import Console
 from rich.markdown import Markdown
@@ -23,13 +26,14 @@ from second_brain.domain.models import (
     Abstention,
     ActivityReport,
     Answer,
+    AskResult,
     ChatReply,
     HedgedAnswer,
     Note,
     SaveAck,
     SessionClosed,
     TurnResult,
-    WebAnswer
+    WebAnswer,
 )
 from second_brain.domain.retrieval import index_notes
 from second_brain.infra.index.sqlite import SqliteNoteIndex
@@ -44,9 +48,11 @@ from second_brain.infra.rerank.cross_encoder import CrossEncoderReranker
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.infra.trace.jsonl import JsonlTraceSink
+from second_brain.infra.voice.groq_whisper import GroqTranscriber, TranscriptionFailure
+from second_brain.infra.web.openai_search import OpenAIWebSearcher
+from second_brain.presentation.voice import record_until_enter
 from second_brain.seed.generate import run_seed, synthesize_openai
 from second_brain.seed.spec import PERSONA, all_briefs
-from second_brain.infra.web.openai_search import OpenAIWebSearcher
 
 app = typer.Typer(help="Second brain — a personal memory assistant.")
 console = Console()
@@ -118,23 +124,16 @@ def _render_result(result: TurnResult) -> None:
             )
             console.print(_sources_panel(sources))
         case Abstention(message=message, question=question):
-            console.print(Panel(message, title="not in your notes", border_style="yellow"))
+            body = message
             if question:
-                console.print("[dim]Hint: No local answer found. Try asking with a web  search switch.[/dim]")
-        
+                body += f'\n\n[dim]try: "search the web for {question}"[/dim]'
+            console.print(Panel(body, title="not in your notes", border_style="yellow"))
         case WebAnswer(text=text, sources=sources):
-            console.print()
-            source_lines = "\n".join(f"• {s.title} — [dim]{s.url}[/dim]" for s in sources)
-            panel_body = f"{text}\n\n[bold cyan]Sources:[/bold cyan]\n{source_lines}" if sources else text
+            links = "\n".join(f"• {s.title}  [dim]{s.url}[/dim]" for s in sources)
+            body = text + (f"\n\n{links}" if links else "")
             console.print(
-                Panel(
-                    panel_body,
-                    title="from the web — not your notes",
-                    border_style="cyan",
-                )
+                Panel(body, title="from the web — not your notes", border_style="cyan")
             )
-            console.print()
-    
         case ActivityReport(caption=caption, notes=notes):
             lines = "\n".join(
                 f"• {note.created_at.date()} — {note.title}"
@@ -161,7 +160,7 @@ def _activity_caption(plan: ActivityQueryPlan, count: int) -> str:
 
 @app.command()
 def chat() -> None:
-    """Open a thinking session. /save ingests now, /quit closes."""
+    """Open a thinking session. /save ingests, /voice speaks, /quit closes."""
     settings = get_settings()
     client = _client(settings)
     runtime = _build_runtime(settings, client)
@@ -169,30 +168,38 @@ def chat() -> None:
     index = SqliteNoteIndex(settings.index_path, settings.embed_dim)
     embedder = OpenAIEmbedder(client, settings.embed_model, settings.embed_dim)
     traces = JsonlTraceSink(settings.traces_dir)
-    searcher = OpenAIWebSearcher(client, settings.chat_model)
 
-    ask_fn = lambda question, pivot: answer_question(  # noqa: E731
-        question,
-        embedder=embedder,
-        index=index,
-        repo=repo,
-        answerer=OpenAIAnswerer(client, settings.chat_model),
-        reranker=CrossEncoderReranker(settings.rerank_model),
-        pivoter=OpenAIQueryPivoter(client, settings.chat_model),
-        traces=traces,
-        rerank_top=settings.rerank_top,
-        answer_top=settings.answer_top,
-        tau_high=settings.tau_high,
-        tau_low=settings.tau_low,
-        pivot=pivot,
-        trace_session=runtime.session_id,
-    )
+    transcriber: GroqTranscriber | None = None
+    if settings.groq_api_key is not None:
+        transcriber = GroqTranscriber(
+            Groq(api_key=settings.groq_api_key.get_secret_value()),
+            settings.voice_model,
+        )
+
+    def ask_fn(question: str, pivot: str | None) -> AskResult:
+        return answer_question(
+            question,
+            embedder=embedder,
+            index=index,
+            repo=repo,
+            answerer=OpenAIAnswerer(client, settings.chat_model),
+            reranker=CrossEncoderReranker(settings.rerank_model),
+            pivoter=OpenAIQueryPivoter(client, settings.chat_model),
+            traces=traces,
+            rerank_top=settings.rerank_top,
+            answer_top=settings.answer_top,
+            tau_high=settings.tau_high,
+            tau_low=settings.tau_low,
+            pivot=pivot,
+            trace_session=runtime.session_id,
+        )
 
     def activity_fn(plan: ActivityQueryPlan) -> ActivityReport:
         ids = index.activity_search(plan)
         notes = [note for note_id in ids if (note := repo.get(note_id)) is not None]
         return ActivityReport(caption=_activity_caption(plan, len(notes)), notes=notes)
 
+    searcher = OpenAIWebSearcher(client, settings.chat_model)
     dispatch = partial(
         handle_turn,
         router=OpenAIIntentRouter(client, settings.chat_model),
@@ -205,7 +212,7 @@ def chat() -> None:
     console.print(
         Panel(
             f"session [bold]{runtime.session_id}[/bold]\n"
-            "/save → ingest now · /quit → close",
+            "/save → ingest now · /voice → speak · /quit → close",
             title="second brain",
             border_style="cyan",
         )
@@ -213,6 +220,20 @@ def chat() -> None:
     try:
         while True:
             raw = console.input("[bold cyan]you ›[/] ")
+            if raw.strip().lower() == "/voice":
+                if transcriber is None:
+                    console.print("[red]GROQ_API_KEY not set — voice needs it in .env[/red]")
+                    continue
+                console.print("[dim]recording… press Enter to stop[/dim]")
+                try:
+                    raw = transcriber.transcribe(record_until_enter())
+                except TranscriptionFailure:
+                    console.print("[yellow]heard nothing — try again[/yellow]")
+                    continue
+                except Exception as exc:  # noqa: BLE001 — a mic problem must not kill the session
+                    console.print(f"[red]voice capture failed: {exc}[/red]")
+                    continue
+                console.print(f"[bold cyan]you (voice) ›[/] {raw}")
             if not raw.strip():
                 continue
             results = dispatch(runtime, raw)
@@ -221,6 +242,8 @@ def chat() -> None:
             if any(isinstance(r, SessionClosed) for r in results):
                 break
     except (KeyboardInterrupt, EOFError):
+        # Abrupt exits take the same path as /quit — the crash story
+        # and the happy path are one code path.
         console.print()
         _render_result(SessionClosed(notes=runtime.close()))
 
