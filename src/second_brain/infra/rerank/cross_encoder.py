@@ -12,16 +12,12 @@ and the evals do.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
 from typing import Any
 
 from second_brain.domain.models import Note
 from second_brain.domain.retrieval import rerank_text
 
-
-def _sigmoid(x: float) -> float:
-    return 1.0 / (1.0 + math.exp(-x))
 
 
 class CrossEncoderReranker:
@@ -36,8 +32,11 @@ class CrossEncoderReranker:
         if not notes:
             return []
         pairs = [(query, rerank_text(note)) for note in notes]
-        logits = self._ensure_model().predict(pairs)
-        return [_sigmoid(float(logit)) for logit in logits]
+        scores = self._ensure_model().predict(pairs)
+        # CrossEncoder already applies sigmoid for single-label models —
+        # our own on top squashed everything into [0.5, 0.73] and silently
+        # disabled the abstention gate. Found via the ask_decided traces.
+        return [min(1.0, max(0.0, float(score))) for score in scores]
 
     def _ensure_model(self) -> Any:
         if self._model is None:
