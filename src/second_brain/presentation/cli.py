@@ -5,7 +5,6 @@ the core decides *what* happened, presentation decides *how* to show it.
 """
 
 from __future__ import annotations
-from functools import partial
 
 import typer
 from openai import OpenAI
@@ -18,8 +17,11 @@ from second_brain.app.session import SessionRuntime
 from second_brain.app.turns import handle_turn
 from second_brain.config import Settings, get_settings
 from second_brain.domain.models import (
+    Abstention,
     Answer,
+    AskResult,
     ChatReply,
+    HedgedAnswer,
     Note,
     SaveAck,
     SessionClosed,
@@ -30,14 +32,17 @@ from second_brain.infra.index.sqlite import SqliteNoteIndex
 from second_brain.infra.llm.answerer import OpenAIAnswerer
 from second_brain.infra.llm.chat import OpenAIChatResponder
 from second_brain.infra.llm.embeddings import OpenAIEmbedder
-from second_brain.infra.llm.segmenter import OpenAISegmenter
 from second_brain.infra.llm.enricher import OpenAIEnricher
+from second_brain.infra.llm.pivot import OpenAIQueryPivoter
+from second_brain.infra.llm.segmenter import OpenAISegmenter
+from second_brain.infra.rerank.cross_encoder import CrossEncoderReranker
 from second_brain.infra.store.markdown import MarkdownNoteRepository
 from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.infra.trace.jsonl import JsonlTraceSink
-
 from second_brain.seed.generate import run_seed, synthesize_openai
 from second_brain.seed.spec import PERSONA, all_briefs
+
+from functools import partial
 
 app = typer.Typer(help="Second brain — a personal memory assistant.")
 console = Console()
@@ -74,6 +79,14 @@ def _saved_lines(notes: list[Note]) -> str:
     return "\n".join(f"• {note.title}  [dim]({note.id})[/dim]" for note in notes)
 
 
+def _sources_panel(sources: list[Note]) -> Panel:
+    lines = "\n".join(
+        f"• {note.title}  [dim]— {note.created_at.date()} · {note.id}[/dim]"
+        for note in sources
+    )
+    return Panel(lines or "—", title="sources", border_style="blue")
+
+
 def _render(result: TurnResult) -> None:
     match result:
         case ChatReply(text=text):
@@ -88,23 +101,24 @@ def _render(result: TurnResult) -> None:
             )
 
 
-def _render_answer(answer: Answer) -> None:
-    if not answer.grounded:
-        console.print(
-            Panel(
-                answer.text or "Nothing in your notes covers this yet.",
-                title="not in your notes",
-                border_style="yellow",
+def _render_ask(result: AskResult) -> None:
+    match result:
+        case Answer(text=text, sources=sources):
+            console.print()
+            console.print(Markdown(text))
+            console.print(_sources_panel(sources))
+        case HedgedAnswer(text=text, sources=sources, top_score=score):
+            console.print(
+                Panel(
+                    f"[dim]closest match, not a confident answer "
+                    f"(relevance {score:.2f})[/dim]\n\n{text}",
+                    title="hedged",
+                    border_style="yellow",
+                )
             )
-        )
-        return
-    console.print()
-    console.print(Markdown(answer.text))
-    sources = "\n".join(
-        f"• {note.title}  [dim]— {note.created_at.date()} · {note.id}[/dim]"
-        for note in answer.sources
-    )
-    console.print(Panel(sources, title="sources", border_style="blue"))
+            console.print(_sources_panel(sources))
+        case Abstention(message=message):
+            console.print(Panel(message, title="not in your notes", border_style="yellow"))
 
 
 @app.command()
@@ -130,27 +144,30 @@ def chat() -> None:
             if isinstance(result, SessionClosed):
                 break
     except (KeyboardInterrupt, EOFError):
-        # Abrupt exits take the same path as /quit — the crash story
-        # and the happy path are one code path.
         console.print()
         _render(SessionClosed(notes=runtime.close()))
 
 
 @app.command()
-def ask(question: str, k: int = typer.Option(5, help="Candidates to retrieve")) -> None:
-    """Ask your notes a question — from a fresh process, no session needed."""
+def ask(question: str) -> None:
+    """Ask your notes a question — full funnel: hybrid, reranked, gated."""
     settings = get_settings()
     client = _client(settings)
-    answer = answer_question(
+    result = answer_question(
         question,
         embedder=OpenAIEmbedder(client, settings.embed_model, settings.embed_dim),
         index=SqliteNoteIndex(settings.index_path, settings.embed_dim),
         repo=MarkdownNoteRepository(settings.notes_dir),
         answerer=OpenAIAnswerer(client, settings.chat_model),
+        reranker=CrossEncoderReranker(settings.rerank_model),
+        pivoter=OpenAIQueryPivoter(client, settings.chat_model),
         traces=JsonlTraceSink(settings.traces_dir),
-        k=k,
+        rerank_top=settings.rerank_top,
+        answer_top=settings.answer_top,
+        tau_high=settings.tau_high,
+        tau_low=settings.tau_low,
     )
-    _render_answer(answer)
+    _render_ask(result)
 
 
 @app.command()
@@ -165,7 +182,7 @@ def reindex() -> None:
     with console.status("reindexing from Markdown…"):
         notes = list(repo.iter_all())
         index.clear()
-        index_notes(notes, embedder=embedder, index=index, enricher=enricher)
+        index_notes(notes, enricher=enricher, embedder=embedder, index=index)
     console.print(f"[green]Reindexed {len(notes)} notes.[/green]")
 
 
@@ -189,7 +206,9 @@ def seed(limit: int = typer.Option(0, help="Only the first N sessions (0 = all)"
     )
     for line in progress:
         console.print(line)
-    console.print(f"[green]Store now holds {SqliteNoteIndex(settings.index_path, settings.embed_dim).count()} indexed notes.[/green]")
+    total = SqliteNoteIndex(settings.index_path, settings.embed_dim).count()
+    console.print(f"[green]Store now holds {total} indexed notes.[/green]")
+
 
 if __name__ == "__main__":
     app()

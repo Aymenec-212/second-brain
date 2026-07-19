@@ -103,3 +103,30 @@ class FakeEnricher:
             gist_en=f"English gist of: {note.title}",
             questions=[f"What did I note about {note.title}?"],
         )
+
+
+class FakeReranker:
+    """Deterministic token-overlap relevance: |query ∩ note| / |query|.
+
+    Crude, but it reproduces the property the real cross-encoder brings —
+    a note about the queried topic outranks a note that merely shares
+    vocabulary — which is exactly what gate tests need."""
+
+    def rerank(self, query: str, notes: Sequence[Note]) -> list[float]:
+        query_tokens = set(query.lower().split())
+        scores: list[float] = []
+        for note in notes:
+            note_tokens = set(f"{note.title} {note.body}".lower().split())
+            overlap = len(query_tokens & note_tokens)
+            scores.append(overlap / max(len(query_tokens), 1))
+        return scores
+
+
+class FakePivoter:
+    """Replays a preset pivot, or echoes the query unchanged."""
+
+    def __init__(self, english: str | None = None) -> None:
+        self._english = english
+
+    def pivot(self, query: str) -> str:
+        return self._english if self._english is not None else query

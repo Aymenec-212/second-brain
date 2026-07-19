@@ -127,8 +127,24 @@ class SearchHit(BaseModel):
     score: float
 
 class Answer(BaseModel):
-    """v0 ask result. Phase 3 adds the score gate and hedged/abstention forms."""
+    """Confident, grounded answer with its sources."""
 
     text: str
     sources: list[Note]
-    grounded: bool    
+
+
+class HedgedAnswer(BaseModel):
+    """Best available match, explicitly below full confidence."""
+
+    text: str
+    sources: list[Note]
+    top_score: float
+
+
+class Abstention(BaseModel):
+    """The notes don't cover it — said plainly."""
+
+    message: str
+
+
+AskResult = Answer | HedgedAnswer | Abstention

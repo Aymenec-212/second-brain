@@ -87,3 +87,15 @@ class Enricher(Protocol):
     """Cognitive task: produce retrieval enrichment for one note."""
 
     def enrich(self, note: Note) -> NoteEnrichment: ...
+
+class QueryPivoter(Protocol):
+    """Cognitive task: English pivot of a query for lexical search."""
+
+    def pivot(self, query: str) -> str: ...
+
+
+class Reranker(Protocol):
+    """Relevance scores in [0, 1], aligned with the input order.
+    Sorting and thresholding stay in the domain."""
+
+    def rerank(self, query: str, notes: Sequence[Note]) -> list[float]: ...    

@@ -107,4 +107,11 @@ class NoteEnrichment(BaseModel):
             "the owner might ask months later"
         ),
         max_length=8,
+    )
+
+class QueryPivot(BaseModel):
+    """English form of a query, for the lexical leg only."""
+
+    english: NonEmptyStr = Field(
+        description="The query in English; unchanged if already English. Keep names and numbers exactly."
     )    
