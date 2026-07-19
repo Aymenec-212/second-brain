@@ -92,6 +92,12 @@ class SessionRuntime:
         self._closed = True
         self._emit("session_closed")
         return notes
+    
+    def trace(self, kind: str, **payload: object) -> None:
+        self._emit(kind, **payload)
+
+    def history_tail(self, n: int = 6) -> list[Turn]:
+        return self._history[-n:]    
 
     def _append(self, role: Role, content: str) -> Turn:
         turn = Turn(index=self._next_index, role=role, content=content)

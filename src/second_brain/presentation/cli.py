@@ -6,6 +6,8 @@ the core decides *what* happened, presentation decides *how* to show it.
 
 from __future__ import annotations
 
+from functools import partial
+
 import typer
 from openai import OpenAI
 from rich.console import Console
@@ -16,10 +18,11 @@ from second_brain.app.ask import answer_question
 from second_brain.app.session import SessionRuntime
 from second_brain.app.turns import handle_turn
 from second_brain.config import Settings, get_settings
+from second_brain.domain.contracts import ActivityQueryPlan
 from second_brain.domain.models import (
     Abstention,
+    ActivityReport,
     Answer,
-    AskResult,
     ChatReply,
     HedgedAnswer,
     Note,
@@ -34,6 +37,7 @@ from second_brain.infra.llm.chat import OpenAIChatResponder
 from second_brain.infra.llm.embeddings import OpenAIEmbedder
 from second_brain.infra.llm.enricher import OpenAIEnricher
 from second_brain.infra.llm.pivot import OpenAIQueryPivoter
+from second_brain.infra.llm.router import OpenAIIntentRouter
 from second_brain.infra.llm.segmenter import OpenAISegmenter
 from second_brain.infra.rerank.cross_encoder import CrossEncoderReranker
 from second_brain.infra.store.markdown import MarkdownNoteRepository
@@ -41,8 +45,6 @@ from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.infra.trace.jsonl import JsonlTraceSink
 from second_brain.seed.generate import run_seed, synthesize_openai
 from second_brain.seed.spec import PERSONA, all_briefs
-
-from functools import partial
 
 app = typer.Typer(help="Second brain — a personal memory assistant.")
 console = Console()
@@ -87,7 +89,7 @@ def _sources_panel(sources: list[Note]) -> Panel:
     return Panel(lines or "—", title="sources", border_style="blue")
 
 
-def _render(result: TurnResult) -> None:
+def _render_result(result: TurnResult) -> None:
     match result:
         case ChatReply(text=text):
             console.print()
@@ -99,10 +101,6 @@ def _render(result: TurnResult) -> None:
             console.print(
                 Panel(_saved_lines(notes), title="session closed", border_style="green")
             )
-
-
-def _render_ask(result: AskResult) -> None:
-    match result:
         case Answer(text=text, sources=sources):
             console.print()
             console.print(Markdown(text))
@@ -119,13 +117,70 @@ def _render_ask(result: AskResult) -> None:
             console.print(_sources_panel(sources))
         case Abstention(message=message):
             console.print(Panel(message, title="not in your notes", border_style="yellow"))
+        case ActivityReport(caption=caption, notes=notes):
+            lines = "\n".join(
+                f"• {note.created_at.date()} — {note.title}"
+                f"  [dim]({', '.join(note.tags[:3])})[/dim]"
+                for note in notes
+            )
+            console.print(
+                Panel(lines or "No notes match.", title=caption, border_style="magenta")
+            )
+
+
+def _activity_caption(plan: ActivityQueryPlan, count: int) -> str:
+    window = ""
+    if plan.since and plan.until:
+        window = f" {plan.since} → {plan.until}"
+    elif plan.since:
+        window = f" since {plan.since}"
+    elif plan.until:
+        window = f" until {plan.until}"
+    filters = ", ".join(plan.tags + plan.entities)
+    scope = f" · {filters}" if filters else ""
+    return f"activity{window}{scope} — {count} notes"
 
 
 @app.command()
 def chat() -> None:
     """Open a thinking session. /save ingests now, /quit closes."""
     settings = get_settings()
-    runtime = _build_runtime(settings, _client(settings))
+    client = _client(settings)
+    runtime = _build_runtime(settings, client)
+    repo = MarkdownNoteRepository(settings.notes_dir)
+    index = SqliteNoteIndex(settings.index_path, settings.embed_dim)
+    embedder = OpenAIEmbedder(client, settings.embed_model, settings.embed_dim)
+    traces = JsonlTraceSink(settings.traces_dir)
+
+    ask_fn = lambda question, pivot: answer_question(  # noqa: E731
+        question,
+        embedder=embedder,
+        index=index,
+        repo=repo,
+        answerer=OpenAIAnswerer(client, settings.chat_model),
+        reranker=CrossEncoderReranker(settings.rerank_model),
+        pivoter=OpenAIQueryPivoter(client, settings.chat_model),
+        traces=traces,
+        rerank_top=settings.rerank_top,
+        answer_top=settings.answer_top,
+        tau_high=settings.tau_high,
+        tau_low=settings.tau_low,
+        pivot=pivot,
+    )
+
+    def activity_fn(plan: ActivityQueryPlan) -> ActivityReport:
+        ids = index.activity_search(plan)
+        notes = [note for note_id in ids if (note := repo.get(note_id)) is not None]
+        return ActivityReport(caption=_activity_caption(plan, len(notes)), notes=notes)
+
+    dispatch = partial(
+        handle_turn,
+        router=OpenAIIntentRouter(client, settings.chat_model),
+        ask=ask_fn,
+        activity=activity_fn,
+        confidence_floor=settings.router_confidence_floor,
+    )
+
     console.print(
         Panel(
             f"session [bold]{runtime.session_id}[/bold]\n"
@@ -139,13 +194,14 @@ def chat() -> None:
             raw = console.input("[bold cyan]you ›[/] ")
             if not raw.strip():
                 continue
-            result = handle_turn(runtime, raw)
-            _render(result)
-            if isinstance(result, SessionClosed):
+            results = dispatch(runtime, raw)
+            for result in results:
+                _render_result(result)
+            if any(isinstance(r, SessionClosed) for r in results):
                 break
     except (KeyboardInterrupt, EOFError):
         console.print()
-        _render(SessionClosed(notes=runtime.close()))
+        _render_result(SessionClosed(notes=runtime.close()))
 
 
 @app.command()
@@ -167,7 +223,7 @@ def ask(question: str) -> None:
         tau_high=settings.tau_high,
         tau_low=settings.tau_low,
     )
-    _render_ask(result)
+    _render_result(result)
 
 
 @app.command()

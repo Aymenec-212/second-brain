@@ -48,6 +48,7 @@ def answer_question(
     reranker: Reranker,
     pivoter: QueryPivoter,
     traces: TraceSink,
+    pivot: str | None = None,
     rerank_top: int = 20,
     answer_top: int = 5,
     tau_high: float = 0.6,
@@ -58,7 +59,7 @@ def answer_question(
         TraceEvent(session_id=ask_id, kind="ask_received", payload={"chars": len(question)})
     )
 
-    pivot = pivoter.pivot(question)
+    pivot = pivot if pivot is not None else pivoter.pivot(question)
     [query_vector] = embedder.embed([question])
     dense = index.dense_search(query_vector, rerank_top)
     lexical = index.lexical_search(f"{question} {pivot}", rerank_top)

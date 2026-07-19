@@ -148,3 +148,15 @@ class Abstention(BaseModel):
 
 
 AskResult = Answer | HedgedAnswer | Abstention
+
+class ActivityReport(BaseModel):
+    """Deterministic answer to 'what did I work on': notes matched by SQL."""
+
+    caption: str
+    notes: list[Note]
+
+
+TurnResult = (
+    ChatReply | SaveAck | SessionClosed | ActivityReport
+    | Answer | HedgedAnswer | Abstention
+)

@@ -20,7 +20,8 @@ from pathlib import Path
 
 import sqlite_vec
 
-from second_brain.domain.contracts import NoteEnrichment
+from second_brain.domain.contracts import NoteEnrichment, ActivityQueryPlan
+from second_brain.infra.index.activity import compile_activity_query
 from second_brain.domain.models import Note, SearchHit
 from second_brain.domain.retrieval import content_hash
 
@@ -233,3 +234,7 @@ class SqliteNoteIndex:
                 f"index was built with {stored}-dim embeddings but config now "
                 f"says {self._dim} — delete data/index.db and run `sb reindex`"
             )
+
+    def activity_search(self, plan: ActivityQueryPlan) -> list[str]:
+        sql, params = compile_activity_query(plan)
+        return [row[0] for row in self._conn.execute(sql, params).fetchall()]    

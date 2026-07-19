@@ -10,11 +10,66 @@ single source of truth.
 """
 
 from __future__ import annotations
+from datetime import date
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from second_brain.domain.models import Language, NonEmptyStr, NoteType
 
+class Intent(StrEnum):
+    CHAT = "chat"
+    SAVE = "save"
+    NOTES_QA = "notes_qa"
+    ACTIVITY = "activity"
+    WEB_SEARCH = "web_search"
+
+
+class ActivityQueryPlan(BaseModel):
+    """The only shape the model may fill for activity queries; a pure
+    function compiles it to SQL — the model never writes SQL."""
+
+    since: date | None = Field(
+        default=None,
+        description="Inclusive ISO date; resolve relative phrases from today's date",
+    )
+    until: date | None = Field(default=None, description="Inclusive ISO date")
+    tags: list[str] = Field(default_factory=list, description="Match any (OR)")
+    entities: list[str] = Field(default_factory=list, description="Match any (OR)")
+    types: list[NoteType] = Field(default_factory=list)
+    limit: int = Field(default=20, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> ActivityQueryPlan:
+        if self.since and self.until and self.until < self.since:
+            raise ValueError("until must be >= since")
+        return self
+
+
+class RouterDecision(BaseModel):
+    """One validated object per turn: what to do, in what order."""
+
+    intents: list[Intent] = Field(min_length=1, max_length=3, description="Execution order")
+    confidence: float = Field(ge=0.0, le=1.0)
+    question: str | None = Field(
+        default=None, description="The question part only, original language"
+    )
+    query_en: str | None = Field(default=None, description="English pivot of question")
+    activity: ActivityQueryPlan | None = None
+
+    @model_validator(mode="after")
+    def _slots_match_intents(self) -> RouterDecision:
+        deduped: list[Intent] = []
+        for intent in self.intents:
+            if intent not in deduped:
+                deduped.append(intent)
+        self.intents = deduped
+        if Intent.NOTES_QA in self.intents and not self.question:
+            raise ValueError("notes_qa requires the extracted question")
+        if Intent.ACTIVITY in self.intents and self.activity is None:
+            raise ValueError("activity requires a query plan")
+        return self
+    
 
 class NoteDraft(BaseModel):
     """One prospective note, proposed by the segmenter over a transcript span."""
@@ -114,4 +169,4 @@ class QueryPivot(BaseModel):
 
     english: NonEmptyStr = Field(
         description="The query in English; unchanged if already English. Keep names and numbers exactly."
-    )    
+    )

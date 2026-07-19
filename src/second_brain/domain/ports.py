@@ -15,8 +15,18 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Protocol
 
-from second_brain.domain.contracts import NoteDraft, AnswerDraft, NoteEnrichment
+from second_brain.domain.contracts import NoteDraft, AnswerDraft, NoteEnrichment, RouterDecision, ActivityQueryPlan
 from second_brain.domain.models import Note, TraceEvent, Turn, SearchHit
+
+
+class IntentRouter(Protocol):
+    """Cognitive task: classify a turn and fill its slots."""
+
+    def route(self, text: str, history: Sequence[Turn]) -> RouterDecision: ...
+
+
+# NoteIndex gains:
+    def activity_search(self, plan: ActivityQueryPlan) -> list[str]: ...
 
 
 class ChatResponder(Protocol):

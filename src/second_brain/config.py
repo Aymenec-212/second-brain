@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     tau_high: float = 0.6
     tau_low: float = 0.2
 
+    #Intent Router confidence threshold
+    router_confidence_floor: float = 0.4
+
     @property
     def index_path(self) -> Path:
         return self.data_dir / "index.db"
