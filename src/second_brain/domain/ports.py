@@ -16,7 +16,7 @@ from collections.abc import Iterable, Sequence
 from typing import Protocol
 
 from second_brain.domain.contracts import NoteDraft, AnswerDraft, NoteEnrichment, RouterDecision, ActivityQueryPlan
-from second_brain.domain.models import Note, TraceEvent, Turn, SearchHit
+from second_brain.domain.models import Note, TraceEvent, Turn, SearchHit, WebAnswer
 
 
 class IntentRouter(Protocol):
@@ -108,4 +108,9 @@ class Reranker(Protocol):
     """Relevance scores in [0, 1], aligned with the input order.
     Sorting and thresholding stay in the domain."""
 
-    def rerank(self, query: str, notes: Sequence[Note]) -> list[float]: ...    
+    def rerank(self, query: str, notes: Sequence[Note]) -> list[float]: ...
+
+class WebSearcher(Protocol):
+    """Answer from the live web; presentation must mark it as such."""
+
+    def search(self, question: str) -> WebAnswer: ...       

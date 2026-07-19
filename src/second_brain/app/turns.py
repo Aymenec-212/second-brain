@@ -1,14 +1,14 @@
-"""Turn dispatch: the deterministic ladder, now with the router rung.
+"""Turn dispatch: the deterministic ladder.
 
 Order: slash commands (free) → intent router (one call) → dispatch.
 The router proposes a validated RouterDecision; this module disposes —
 a plain loop over intents executing injected callables. Fallbacks are
-deterministic: routing failure degrades to chat, low confidence asks
-for a rephrase without spending further tokens.
+deterministic: routing failure degrades to chat, low confidence asks for
+a rephrase, a web failure reports itself honestly.
 
 Only chat-intent turns reach the transcript — a question *about* memory
-is not thinking *worth remembering*, and this falls out of the structure:
-chat_turn is the only path that appends.
+is not thinking *worth remembering* — and this falls out of the
+structure: chat_turn is the only path that appends.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from second_brain.domain.models import (
     SaveAck,
     SessionClosed,
     TurnResult,
+    WebAnswer,
 )
 from second_brain.domain.ports import IntentRouter
 from second_brain.infra.llm.router import RoutingFailure
@@ -33,12 +34,11 @@ _CLARIFY = (
     "I'm not sure what you're asking me to do — could you rephrase? / "
     "Je ne suis pas sûr de ce que tu me demandes — tu peux reformuler ?"
 )
-_WEB_SOON = (
-    "Web search isn't wired up yet — for now I can only answer from your notes."
-)
+_WEB_FAILED = "The web search didn't return anything usable — try rephrasing."
 
 AskFn = Callable[[str, str | None], AskResult]
 ActivityFn = Callable[[ActivityQueryPlan], ActivityReport]
+WebFn = Callable[[str], WebAnswer]
 
 
 def handle_turn(
@@ -48,6 +48,7 @@ def handle_turn(
     router: IntentRouter,
     ask: AskFn,
     activity: ActivityFn,
+    web: WebFn,
     confidence_floor: float = 0.4,
 ) -> list[TurnResult]:
     text = raw.strip()
@@ -89,5 +90,9 @@ def handle_turn(
             assert decision.activity is not None  # guaranteed by the contract
             results.append(activity(decision.activity))
         elif intent is Intent.WEB_SEARCH:
-            results.append(ChatReply(text=_WEB_SOON))
+            try:
+                results.append(web(decision.question or text))
+            except Exception as exc:  # noqa: BLE001 — a web hiccup must not sink the turn
+                runtime.trace("web_failed", error=str(exc))
+                results.append(ChatReply(text=_WEB_FAILED))
     return results

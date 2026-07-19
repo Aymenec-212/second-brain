@@ -29,6 +29,7 @@ from second_brain.domain.models import (
     SaveAck,
     SessionClosed,
     TurnResult,
+    WebAnswer
 )
 from second_brain.domain.retrieval import index_notes
 from second_brain.infra.index.sqlite import SqliteNoteIndex
@@ -45,6 +46,7 @@ from second_brain.infra.store.transcripts import JsonlTranscriptStore
 from second_brain.infra.trace.jsonl import JsonlTraceSink
 from second_brain.seed.generate import run_seed, synthesize_openai
 from second_brain.seed.spec import PERSONA, all_briefs
+from second_brain.infra.web.openai_search import OpenAIWebSearcher
 
 app = typer.Typer(help="Second brain — a personal memory assistant.")
 console = Console()
@@ -115,8 +117,24 @@ def _render_result(result: TurnResult) -> None:
                 )
             )
             console.print(_sources_panel(sources))
-        case Abstention(message=message):
+        case Abstention(message=message, question=question):
             console.print(Panel(message, title="not in your notes", border_style="yellow"))
+            if question:
+                console.print("[dim]Hint: No local answer found. Try asking with a web  search switch.[/dim]")
+        
+        case WebAnswer(text=text, sources=sources):
+            console.print()
+            source_lines = "\n".join(f"• {s.title} — [dim]{s.url}[/dim]" for s in sources)
+            panel_body = f"{text}\n\n[bold cyan]Sources:[/bold cyan]\n{source_lines}" if sources else text
+            console.print(
+                Panel(
+                    panel_body,
+                    title="from the web — not your notes",
+                    border_style="cyan",
+                )
+            )
+            console.print()
+    
         case ActivityReport(caption=caption, notes=notes):
             lines = "\n".join(
                 f"• {note.created_at.date()} — {note.title}"
@@ -151,6 +169,7 @@ def chat() -> None:
     index = SqliteNoteIndex(settings.index_path, settings.embed_dim)
     embedder = OpenAIEmbedder(client, settings.embed_model, settings.embed_dim)
     traces = JsonlTraceSink(settings.traces_dir)
+    searcher = OpenAIWebSearcher(client, settings.chat_model)
 
     ask_fn = lambda question, pivot: answer_question(  # noqa: E731
         question,
@@ -166,6 +185,7 @@ def chat() -> None:
         tau_high=settings.tau_high,
         tau_low=settings.tau_low,
         pivot=pivot,
+        trace_session=runtime.session_id,
     )
 
     def activity_fn(plan: ActivityQueryPlan) -> ActivityReport:
@@ -178,6 +198,7 @@ def chat() -> None:
         router=OpenAIIntentRouter(client, settings.chat_model),
         ask=ask_fn,
         activity=activity_fn,
+        web=searcher.search,
         confidence_floor=settings.router_confidence_floor,
     )
 

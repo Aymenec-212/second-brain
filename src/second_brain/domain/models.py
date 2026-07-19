@@ -140,14 +140,27 @@ class HedgedAnswer(BaseModel):
     sources: list[Note]
     top_score: float
 
+class WebSource(BaseModel):
+    title: str
+    url: str
+
+
+class WebAnswer(BaseModel):
+    """From the live web, explicitly not from notes."""
+
+    text: str
+    sources: list[WebSource]
+
+
+# Abstention gains:
+    question: str | None = None  # lets presentation offer a web follow-up
 
 class Abstention(BaseModel):
     """The notes don't cover it — said plainly."""
 
     message: str
+    question: str | None = None
 
-
-AskResult = Answer | HedgedAnswer | Abstention
 
 class ActivityReport(BaseModel):
     """Deterministic answer to 'what did I work on': notes matched by SQL."""
@@ -155,8 +168,9 @@ class ActivityReport(BaseModel):
     caption: str
     notes: list[Note]
 
+AskResult = Answer | HedgedAnswer | Abstention
 
 TurnResult = (
     ChatReply | SaveAck | SessionClosed | ActivityReport
-    | Answer | HedgedAnswer | Abstention
+    | Answer | HedgedAnswer | Abstention | WebAnswer
 )

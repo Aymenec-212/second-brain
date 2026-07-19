@@ -49,12 +49,13 @@ def answer_question(
     pivoter: QueryPivoter,
     traces: TraceSink,
     pivot: str | None = None,
+    trace_session: str | None = None,
     rerank_top: int = 20,
     answer_top: int = 5,
     tau_high: float = 0.6,
     tau_low: float = 0.2,
 ) -> AskResult:
-    ask_id = f"ask-{new_id()}"
+    ask_id = trace_session if trace_session is not None else f"ask-{new_id()}"
     traces.emit(
         TraceEvent(session_id=ask_id, kind="ask_received", payload={"chars": len(question)})
     )
@@ -73,7 +74,7 @@ def answer_question(
 
     if not notes:
         _emit_decision(traces, ask_id, pivot, dense, lexical, [], "abstain")
-        return Abstention(message=_NOT_COVERED)
+        return Abstention(message=_NOT_COVERED, question=question)
 
     scores = reranker.rerank(question, notes)
     scored = [
@@ -86,12 +87,12 @@ def answer_question(
     _emit_decision(traces, ask_id, pivot, dense, lexical, scored, decision.zone.value)
 
     if decision.zone is GateZone.ABSTAIN:
-        return Abstention(message=_NOT_COVERED)
+        return Abstention(message=_NOT_COVERED, question=question)
 
     kept = [s.note for s in decision.notes]
     draft = answerer.answer(question, kept)
     if not draft.grounded:
-        return Abstention(message=draft.answer)
+        return Abstention(message=draft.answer, question=question)
     sources = [note for note in kept if note.id in draft.cited_note_ids]
     if decision.zone is GateZone.HEDGED:
         return HedgedAnswer(
