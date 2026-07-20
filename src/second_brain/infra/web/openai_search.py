@@ -4,15 +4,31 @@ No new vendor, no new key — the account already powering chat searches the
 web. Provenance is structural: this returns a WebAnswer, presentation
 renders it as visibly not-from-notes, and no repository exists anywhere on
 this path, so the store cannot be touched by accident.
+
+The tool is FORCED (tool_choice="required") because this route only fires
+on an explicit web intent — the user said "search"; a model deciding to
+answer from its parameters instead is exactly the failure the live demo
+exposed. Instructions carry today's date and forbid clarifying questions.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from openai import OpenAI
 
 from second_brain.domain.models import WebAnswer, WebSource
+
+_INSTRUCTIONS = """\
+Today is {today}. You are the web-search arm of a personal assistant.
+Search the web and answer strictly from the results.
+- Never ask clarifying questions: pick the most reasonable interpretation
+  of the request and answer it. If genuinely ambiguous, answer the most
+  likely reading and note the assumption in one clause.
+- Prefer fresh sources for anything time-sensitive.
+- Answer in the language of the request. Lead with the answer; stay concise.
+"""
 
 
 class WebSearchFailure(RuntimeError):
@@ -30,6 +46,10 @@ class OpenAIWebSearcher:
         response = self._client.responses.create(
             model=self._model,
             tools=[{"type": "web_search"}],  # older SDKs: "web_search_preview"
+            tool_choice="required",
+            instructions=_INSTRUCTIONS.format(
+                today=datetime.now(UTC).date().isoformat()
+            ),
             input=question,
         )
         text = getattr(response, "output_text", "") or ""

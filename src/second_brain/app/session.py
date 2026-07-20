@@ -5,9 +5,16 @@ turn to the transcript *before* the model sees it, keeps the in-memory
 history the chat prompt needs, and funnels /save, close, Ctrl-C, and
 crash re-runs through the single ingest_session path.
 
+Two histories, deliberately separate (decision log #45):
+- the transcript holds only chat-intent turns — the thinking worth
+  remembering, and the only thing ingestion ever reads;
+- the exchange log holds every turn and its outcome, in memory only,
+  capped — routing context, so follow-ups to a web search or a question
+  keep their referent. It is never persisted and never ingested.
+
 Write ordering: canonical Markdown first, index second and best-effort.
-An indexing failure (network, provider outage) is traced and swallowed —
-thinking is never lost to an outage, and `sb reindex` heals the drift.
+An indexing failure is traced and swallowed — thinking is never lost to
+an outage, and `sb reindex` heals the drift.
 """
 
 from __future__ import annotations
@@ -17,14 +24,16 @@ from second_brain.domain.models import Note, Role, TraceEvent, Turn, new_id
 from second_brain.domain.ports import (
     ChatResponder,
     Embedder,
+    Enricher,
     NoteIndex,
     NoteRepository,
     Segmenter,
     TraceSink,
     TranscriptStore,
-    Enricher,
 )
 from second_brain.domain.retrieval import index_notes
+
+_EXCHANGE_LOG_LINES = 12  # 6 exchanges of context for the router
 
 
 class SessionRuntime:
@@ -50,6 +59,7 @@ class SessionRuntime:
         self._enricher = enricher
         self.session_id = new_id()
         self._history: list[Turn] = []
+        self._exchanges: list[str] = []
         self._next_index = 0
         self._closed = False
         self._emit("session_opened")
@@ -77,7 +87,12 @@ class SessionRuntime:
         self._emit("ingestion_completed", trigger=trigger, note_ids=[n.id for n in notes])
         if notes:
             try:
-                index_notes(notes, embedder=self._embedder, index=self._index, enricher=self._enricher)
+                index_notes(
+                    notes,
+                    enricher=self._enricher,
+                    embedder=self._embedder,
+                    index=self._index,
+                )
                 self._emit("notes_indexed", count=len(notes))
             except Exception as exc:  # noqa: BLE001 — canonical write already succeeded
                 self._emit("indexing_failed", error=str(exc))
@@ -92,12 +107,18 @@ class SessionRuntime:
         self._closed = True
         self._emit("session_closed")
         return notes
-    
+
+    def record_exchange(self, user_text: str, outcome: str) -> None:
+        """Routing context only — see the module docstring."""
+        self._exchanges.append(f"user: {user_text}")
+        self._exchanges.append(f"outcome: {outcome}")
+        self._exchanges = self._exchanges[-_EXCHANGE_LOG_LINES:]
+
+    def exchange_tail(self) -> list[str]:
+        return list(self._exchanges)
+
     def trace(self, kind: str, **payload: object) -> None:
         self._emit(kind, **payload)
-
-    def history_tail(self, n: int = 6) -> list[Turn]:
-        return self._history[-n:]    
 
     def _append(self, role: Role, content: str) -> Turn:
         turn = Turn(index=self._next_index, role=role, content=content)

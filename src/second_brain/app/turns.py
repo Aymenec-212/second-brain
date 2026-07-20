@@ -2,13 +2,11 @@
 
 Order: slash commands (free) → intent router (one call) → dispatch.
 The router proposes a validated RouterDecision; this module disposes —
-a plain loop over intents executing injected callables. Fallbacks are
-deterministic: routing failure degrades to chat, low confidence asks for
-a rephrase, a web failure reports itself honestly.
+a plain loop over intents executing injected callables.
 
-Only chat-intent turns reach the transcript — a question *about* memory
-is not thinking *worth remembering* — and this falls out of the
-structure: chat_turn is the only path that appends.
+Every turn, whatever its intent, is recorded into the session's exchange
+log with a one-line outcome — that log (not the transcript) is the
+router's context, so follow-ups keep their referent.
 """
 
 from __future__ import annotations
@@ -18,9 +16,12 @@ from collections.abc import Callable
 from second_brain.app.session import SessionRuntime
 from second_brain.domain.contracts import ActivityQueryPlan, Intent
 from second_brain.domain.models import (
+    Abstention,
     ActivityReport,
+    Answer,
     AskResult,
     ChatReply,
+    HedgedAnswer,
     SaveAck,
     SessionClosed,
     TurnResult,
@@ -52,6 +53,29 @@ def handle_turn(
     confidence_floor: float = 0.4,
 ) -> list[TurnResult]:
     text = raw.strip()
+    results = _dispatch(
+        runtime,
+        text,
+        router=router,
+        ask=ask,
+        activity=activity,
+        web=web,
+        confidence_floor=confidence_floor,
+    )
+    runtime.record_exchange(text, _outcome_line(results))
+    return results
+
+
+def _dispatch(
+    runtime: SessionRuntime,
+    text: str,
+    *,
+    router: IntentRouter,
+    ask: AskFn,
+    activity: ActivityFn,
+    web: WebFn,
+    confidence_floor: float,
+) -> list[TurnResult]:
     if text.startswith("/"):
         command = text.split()[0].lower()
         if command == "/save":
@@ -61,7 +85,7 @@ def handle_turn(
         return [ChatReply(text=_HELP)]
 
     try:
-        decision = router.route(text, runtime.history_tail())
+        decision = router.route(text, runtime.exchange_tail())
     except RoutingFailure as exc:
         runtime.trace("routing_failed", error=str(exc))
         return [ChatReply(text=runtime.chat_turn(text))]
@@ -96,3 +120,26 @@ def handle_turn(
                 runtime.trace("web_failed", error=str(exc))
                 results.append(ChatReply(text=_WEB_FAILED))
     return results
+
+
+def _outcome_line(results: list[TurnResult]) -> str:
+    parts: list[str] = []
+    for result in results:
+        match result:
+            case ChatReply(text=text):
+                parts.append(f"chat reply: {text[:80]}")
+            case SaveAck(notes=notes):
+                parts.append(f"saved {len(notes)} notes")
+            case SessionClosed():
+                parts.append("session closed")
+            case Answer(text=text):
+                parts.append(f"answered from notes: {text[:80]}")
+            case HedgedAnswer(text=text):
+                parts.append(f"hedged answer: {text[:80]}")
+            case Abstention():
+                parts.append("abstained — not in notes")
+            case WebAnswer(text=text):
+                parts.append(f"web answer: {text[:80]}")
+            case ActivityReport(notes=notes):
+                parts.append(f"activity report ({len(notes)} notes)")
+    return " | ".join(parts) or "no result"

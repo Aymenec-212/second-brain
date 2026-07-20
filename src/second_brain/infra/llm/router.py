@@ -1,8 +1,8 @@
 """Intent router adapter: one small structured call per turn.
 
-The router classifies, extracts the question, pivots it to English
-(absorbing Phase 3's pivoter for in-session turns), and fills the
-activity plan. It proposes; app/turns.py disposes.
+The router classifies, extracts a SELF-CONTAINED question (references
+resolved from the recent exchanges and today's date), pivots it to
+English, and fills the activity plan. It proposes; app/turns.py disposes.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from openai import OpenAI
 from pydantic import ValidationError
 
 from second_brain.domain.contracts import RouterDecision
-from second_brain.domain.models import Turn
 
 _MAX_ATTEMPTS = 3
 
@@ -31,14 +30,24 @@ Intents — emit 1 to 3, ordered by execution:
   ("what did I decide about X?", "qu'est-ce que j'avais dit sur X ?").
 - activity: a meta question about the store itself — browsing or
   summarizing by time, tag, or kind ("what did I work on last week?",
-  "montre mes notes de juin sur cairn").
+  "montre mes notes de juin sur cairn"). Keep limit at 20 unless the user
+  explicitly asks for everything.
 - web_search: only when they explicitly ask to search the web or internet.
 
 Rules:
+- question must be SELF-CONTAINED. Resolve pronouns and references
+  ("that", "it", "the match", "today") using the recent exchanges and
+  today's date, so it can be executed with no other context.
+  "report what match is played today" after talk of the World Cup in the
+  USA → "what men's football World Cup match is played in the USA today,
+  {today}?".
+- A turn that refines, corrects, or answers a clarification about a
+  previous request keeps that request's intent — check the recent
+  exchanges. Refining an earlier web search is still web_search.
 - A content question that merely mentions time stays notes_qa; activity is
   for browsing/summarizing the store, not for content answers.
-- question: the question part only, in its original language.
-  query_en: its faithful English pivot (identical if already English).
+- question: original language; query_en: its faithful English pivot
+  (identical if already English).
 - activity: fill the plan; resolve relative dates ("last week",
   "ce mois-ci") into absolute ISO dates using today's date.
 - Mixed turns: order intents as they should execute
@@ -51,9 +60,9 @@ class RoutingFailure(RuntimeError):
     """No valid decision within the attempt budget."""
 
 
-def render_context(history: Sequence[Turn], text: str) -> str:
-    tail = "\n".join(f"{t.role.value}: {t.content}" for t in history)
-    prefix = f"Recent context:\n{tail}\n\n" if tail else ""
+def render_context(context: Sequence[str], text: str) -> str:
+    tail = "\n".join(context)
+    prefix = f"Recent exchanges (oldest first):\n{tail}\n\n" if tail else ""
     return f"{prefix}Current turn to route:\n{text}"
 
 
@@ -64,11 +73,11 @@ class OpenAIIntentRouter:
         self._client = client
         self._model = model
 
-    def route(self, text: str, history: Sequence[Turn]) -> RouterDecision:
+    def route(self, text: str, context: Sequence[str]) -> RouterDecision:
         system = _SYSTEM_PROMPT.format(today=datetime.now(UTC).date().isoformat())
         messages: list[dict[str, str]] = [
             {"role": "system", "content": system},
-            {"role": "user", "content": render_context(history, text)},
+            {"role": "user", "content": render_context(context, text)},
         ]
         last_error = ""
         for _ in range(_MAX_ATTEMPTS):
