@@ -98,6 +98,11 @@ class TraceEvent(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+# --- typed turn results -------------------------------------------------
+# Presentation renders on these; the core decides *what* happened, the CLI
+# decides *how* to show it. One union, defined once at the end.
+
+
 class ChatReply(BaseModel):
     """Plain conversational response."""
 
@@ -110,21 +115,18 @@ class SaveAck(BaseModel):
     notes: list[Note]
 
 
-TurnResult = ChatReply | SaveAck
-
 class SessionClosed(BaseModel):
     """Final ingestion happened; the session accepts no more turns."""
 
     notes: list[Note]
 
 
-TurnResult = ChatReply | SaveAck | SessionClosed
-
 class SearchHit(BaseModel):
     """One retrieval candidate. Cosine similarity; higher is better."""
 
     note_id: str
     score: float
+
 
 class Answer(BaseModel):
     """Confident, grounded answer with its sources."""
@@ -140,6 +142,18 @@ class HedgedAnswer(BaseModel):
     sources: list[Note]
     top_score: float
 
+
+class Abstention(BaseModel):
+    """The notes don't cover it — said plainly.
+
+    `question` carries the self-contained query forward so presentation can
+    offer a web-search follow-up without any session state.
+    """
+
+    message: str
+    question: str | None = None
+
+
 class WebSource(BaseModel):
     title: str
     url: str
@@ -152,25 +166,22 @@ class WebAnswer(BaseModel):
     sources: list[WebSource]
 
 
-# Abstention gains:
-    question: str | None = None  # lets presentation offer a web follow-up
-
-class Abstention(BaseModel):
-    """The notes don't cover it — said plainly."""
-
-    message: str
-    question: str | None = None
-
-
 class ActivityReport(BaseModel):
     """Deterministic answer to 'what did I work on': notes matched by SQL."""
 
     caption: str
     notes: list[Note]
 
+
 AskResult = Answer | HedgedAnswer | Abstention
 
 TurnResult = (
-    ChatReply | SaveAck | SessionClosed | ActivityReport
-    | Answer | HedgedAnswer | Abstention | WebAnswer
+    ChatReply
+    | SaveAck
+    | SessionClosed
+    | ActivityReport
+    | Answer
+    | HedgedAnswer
+    | Abstention
+    | WebAnswer
 )

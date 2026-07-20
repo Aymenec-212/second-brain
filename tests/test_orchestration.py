@@ -119,10 +119,25 @@ class StubRouter:
     def __init__(self, decision: RouterDecision | Exception) -> None:
         self._decision = decision
 
-    def route(self, text: str, history: Sequence[Turn]) -> RouterDecision:
+    def route(self, text: str, context: Sequence[Turn]) -> RouterDecision:
         if isinstance(self._decision, Exception):
             raise self._decision
         return self._decision
+    
+def test_router_context_records_non_chat_exchanges(tmp_path: Path) -> None:
+    runtime, transcripts = runtime_with(tmp_path)
+    handle_turn(
+        runtime,
+        "what did I decide about Cairn?",
+        router=StubRouter(decision(Intent.NOTES_QA, question="Cairn?", query_en="Cairn?")),
+        ask=fake_ask,
+        activity=fake_activity,
+        web=fake_web,
+    )
+    tail = runtime.exchange_tail()
+    assert any("what did I decide about Cairn?" in line for line in tail)
+    assert any("abstained" in line for line in tail)
+    assert transcripts.read(runtime.session_id) == []  # transcript untouched    
 
 
 def runtime_with(tmp_path: Path) -> tuple[SessionRuntime, JsonlTranscriptStore]:
