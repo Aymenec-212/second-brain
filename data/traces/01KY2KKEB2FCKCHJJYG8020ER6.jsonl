@@ -1,0 +1,3 @@
+{"ts":"2026-07-21T15:09:40.578478Z","session_id":"01KY2KKEB2FCKCHJJYG8020ER6","turn_index":null,"kind":"session_opened","payload":{}}
+{"ts":"2026-07-21T15:09:45.639023Z","session_id":"01KY2KKEB2FCKCHJJYG8020ER6","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"close","note_ids":[]}}
+{"ts":"2026-07-21T15:09:45.639146Z","session_id":"01KY2KKEB2FCKCHJJYG8020ER6","turn_index":null,"kind":"session_closed","payload":{}}

@@ -1,0 +1,6 @@
+{"ts":"2026-07-21T13:10:18.813291Z","session_id":"01KY2CRWDXEW7NWRH7HPKH2RVY","turn_index":null,"kind":"session_opened","payload":{}}
+{"ts":"2026-07-21T13:10:37.258008Z","session_id":"01KY2CRWDXEW7NWRH7HPKH2RVY","turn_index":null,"kind":"turn_routed","payload":{"intents":["save"],"confidence":0.97,"question":"I decide to choose AWS for deployment, save that","query_en":"I decide to choose AWS for deployment, save that","plan":null}}
+{"ts":"2026-07-21T13:10:49.638519Z","session_id":"01KY2CRWDXEW7NWRH7HPKH2RVY","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"save","note_ids":["01KY2CSTH0N348751CFM874R1E"]}}
+{"ts":"2026-07-21T13:11:03.988977Z","session_id":"01KY2CRWDXEW7NWRH7HPKH2RVY","turn_index":null,"kind":"notes_indexed","payload":{"count":1}}
+{"ts":"2026-07-21T14:35:33.690024Z","session_id":"01KY2CRWDXEW7NWRH7HPKH2RVY","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"close","note_ids":[]}}
+{"ts":"2026-07-21T14:35:33.693227Z","session_id":"01KY2CRWDXEW7NWRH7HPKH2RVY","turn_index":null,"kind":"session_closed","payload":{}}

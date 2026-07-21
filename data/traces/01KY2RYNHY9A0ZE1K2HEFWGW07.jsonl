@@ -1,0 +1,4 @@
+{"ts":"2026-07-21T16:43:11.294188Z","session_id":"01KY2RYNHY9A0ZE1K2HEFWGW07","turn_index":null,"kind":"session_opened","payload":{}}
+{"ts":"2026-07-21T16:43:38.244535Z","session_id":"01KY2RYNHY9A0ZE1K2HEFWGW07","turn_index":null,"kind":"turn_routed","payload":{"intents":["web_search"],"confidence":0.87,"question":"Search the web and check the weather in Casablanca, Morocco today (2026-07-21).","query_en":"Search the web and check the weather in Casablanca, Morocco today (2026-07-21).","plan":null}}
+{"ts":"2026-07-21T16:43:54.955718Z","session_id":"01KY2RYNHY9A0ZE1K2HEFWGW07","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"close","note_ids":[]}}
+{"ts":"2026-07-21T16:43:54.955838Z","session_id":"01KY2RYNHY9A0ZE1K2HEFWGW07","turn_index":null,"kind":"session_closed","payload":{}}

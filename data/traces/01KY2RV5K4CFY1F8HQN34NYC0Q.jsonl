@@ -1,0 +1,4 @@
+{"ts":"2026-07-21T16:41:16.644218Z","session_id":"01KY2RV5K4CFY1F8HQN34NYC0Q","turn_index":null,"kind":"session_opened","payload":{}}
+{"ts":"2026-07-21T16:41:38.231011Z","session_id":"01KY2RV5K4CFY1F8HQN34NYC0Q","turn_index":null,"kind":"turn_routed","payload":{"intents":["web_search"],"confidence":0.92,"question":"search the web for begineer scuba diving certif options","query_en":"Search the web for beginner scuba diving certification options.","plan":null}}
+{"ts":"2026-07-21T16:42:24.670331Z","session_id":"01KY2RV5K4CFY1F8HQN34NYC0Q","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"close","note_ids":[]}}
+{"ts":"2026-07-21T16:42:24.670578Z","session_id":"01KY2RV5K4CFY1F8HQN34NYC0Q","turn_index":null,"kind":"session_closed","payload":{}}

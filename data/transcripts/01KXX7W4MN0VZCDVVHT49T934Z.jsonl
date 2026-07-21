@@ -1,0 +1,2 @@
+{"index":0,"role":"user","content":"\u001b[A\u001b[B\u001b[B","ts":"2026-07-19T13:09:58.996115Z"}
+{"index":1,"role":"assistant","content":"Looks like you sent some control characters (arrow keys). What were you trying to do or say?","ts":"2026-07-19T13:10:00.211262Z"}

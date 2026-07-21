@@ -1,0 +1,6 @@
+{"ts":"2026-07-21T16:29:07.578608Z","session_id":"01KY2R4XKT5ZGD8FNHZ4T4C494","turn_index":null,"kind":"session_opened","payload":{}}
+{"ts":"2026-07-21T16:29:38.946646Z","session_id":"01KY2R4XKT5ZGD8FNHZ4T4C494","turn_index":null,"kind":"turn_routed","payload":{"intents":["save"],"confidence":0.95,"question":"I decided not to use LangChain during this project, save that","query_en":"I decided not to use LangChain during this project, save that","plan":null}}
+{"ts":"2026-07-21T16:29:51.974551Z","session_id":"01KY2R4XKT5ZGD8FNHZ4T4C494","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"save","note_ids":["01KY2R68Z138H5Q0Q9NVYJ74QJ"]}}
+{"ts":"2026-07-21T16:30:05.892690Z","session_id":"01KY2R4XKT5ZGD8FNHZ4T4C494","turn_index":null,"kind":"notes_indexed","payload":{"count":1}}
+{"ts":"2026-07-21T16:30:11.757045Z","session_id":"01KY2R4XKT5ZGD8FNHZ4T4C494","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"close","note_ids":[]}}
+{"ts":"2026-07-21T16:30:11.757342Z","session_id":"01KY2R4XKT5ZGD8FNHZ4T4C494","turn_index":null,"kind":"session_closed","payload":{}}

@@ -1,0 +1,6 @@
+{"ts":"2026-07-21T15:09:55.809696Z","session_id":"01KY2KKX71474CWZQXF3NEHD2G","turn_index":null,"kind":"session_opened","payload":{}}
+{"ts":"2026-07-21T15:10:53.936033Z","session_id":"01KY2KKX71474CWZQXF3NEHD2G","turn_index":null,"kind":"turn_routed","payload":{"intents":["save"],"confidence":0.94,"question":"I'm deciding how to deploy the Second Brain project, I'm using AWS cloud, save that","query_en":"I'm deciding how to deploy the Second Brain project, I'm using AWS cloud, save that","plan":null}}
+{"ts":"2026-07-21T15:11:11.648601Z","session_id":"01KY2KKX71474CWZQXF3NEHD2G","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"save","note_ids":["01KY2KP78VX6TFRTMBSTADEGSP","01KY2KP78VX6TFRTMBSTADEGSQ"]}}
+{"ts":"2026-07-21T15:11:44.420367Z","session_id":"01KY2KKX71474CWZQXF3NEHD2G","turn_index":null,"kind":"notes_indexed","payload":{"count":2}}
+{"ts":"2026-07-21T15:14:31.142271Z","session_id":"01KY2KKX71474CWZQXF3NEHD2G","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"close","note_ids":[]}}
+{"ts":"2026-07-21T15:14:31.144634Z","session_id":"01KY2KKX71474CWZQXF3NEHD2G","turn_index":null,"kind":"session_closed","payload":{}}

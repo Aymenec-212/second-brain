@@ -1,0 +1,9 @@
+{"ts":"2026-07-21T16:20:17.126658Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":null,"kind":"session_opened","payload":{}}
+{"ts":"2026-07-21T16:20:27.015072Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":null,"kind":"turn_routed","payload":{"intents":["chat"],"confidence":0.88,"question":"I'm deciding how to build the agentic system architecture, I am using hexagonal architecture","query_en":"I'm deciding how to build the agentic system architecture, I am using hexagonal architecture","plan":null}}
+{"ts":"2026-07-21T16:20:27.016850Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":0,"kind":"turn_received","payload":{"chars":92}}
+{"ts":"2026-07-21T16:20:36.785289Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":1,"kind":"reply_sent","payload":{"chars":3946}}
+{"ts":"2026-07-21T16:21:06.862273Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":null,"kind":"turn_routed","payload":{"intents":["save"],"confidence":0.92,"question":"Save the decision to build the agentic system architecture using hexagonal (ports & adapters) architecture.","query_en":"Save the decision to build the agentic system architecture using hexagonal (ports & adapters) architecture.","plan":null}}
+{"ts":"2026-07-21T16:21:23.559066Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"save","note_ids":["01KY2QPRF25CBMRSWEQA1CF33D"]}}
+{"ts":"2026-07-21T16:21:38.693908Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":null,"kind":"notes_indexed","payload":{"count":1}}
+{"ts":"2026-07-21T16:21:46.296259Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":null,"kind":"ingestion_completed","payload":{"trigger":"close","note_ids":[]}}
+{"ts":"2026-07-21T16:21:46.296656Z","session_id":"01KY2QMQK6BHQ9AZCK7H30NRG0","turn_index":null,"kind":"session_closed","payload":{}}
