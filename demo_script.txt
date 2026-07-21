@@ -1,0 +1,63 @@
+=== SCENE 1: LIVE SESSION & MULTI-INTENT SAVE ===
+uv run sb chat
+I decided not to use LangChain during this project, save that
+/quit
+
+=== SCENE 2: FRESH PROCESS RECALL ===
+uv run sb ask "did I decided to use LangChain?"
+# Expected: Grounded answer citing the exact LangChain note just created.
+# Concept: Cross-session memory; zero in-memory history is carried over.
+
+=== SCENE 3: DETERMINISTIC ACTIVITY QUERY ===
+uv run sb ask "what did I work on in June?"
+# Expected: Rust project.
+# Concept: Intent router classifies this as 'activity', pure code compiles SQL. No vector search used.
+
+=== SCENE 4: CONTRADICTION PAIRS (TEMPORAL REASONING) ===
+uv run sb ask "which mobile framework am I using for Cairn?"
+# Expected: Flutter (the newer decision). It notes the switch from React Native.
+uv run sb ask "quel framework mobile j'avais choisi en mars pour Cairn ?"
+# Expected: React Native (the older decision). 
+# Concept: French query successfully retrieves English notes and respects the March timestamp.
+
+=== SCENE 5: CROSS-LINGUAL RETRIEVAL (FR NOTES ↔ EN QUERY) ===
+uv run sb ask "what's my apartment budget?"
+# Expected: 420,000 EUR max, 60,000 EUR down payment, ~1,900 EUR monthly.
+uv run sb ask "which neighborhood did I choose for the apartment?"
+# Expected: Montreuil.
+# Concept: English query retrieves French notes via the write-time English gist enrichment.
+
+=== SCENE 6: NEAR-MISS PRECISION (DISTRACTOR TRAP) ===
+uv run sb ask "which database did I pick for Cairn?"
+# Expected: PostgreSQL + PostGIS. It correctly ignores Redis and ClickHouse.
+uv run sb ask "what hydration worked for my bread?"
+# Expected: 75% hydration. It correctly ignores notes about running hydration.
+# Concept: The cross-encoder reranker prevents context blur between similar keywords.
+
+=== SCENE 7: CROSS-LINGUAL NUMERIC EXTRACTION ===
+uv run sb ask "what was my VMA test result?"
+# Expected: 16.5 km/h.
+# Concept: English query extracts exact numeric metrics from a French note.
+
+=== SCENE 8: HONEST ABSTENTION & WEB FALLBACK ===
+uv run sb ask "do my notes say anything about scuba diving?"
+# Expected: Yellow "not in your notes" panel with a web search hint.
+# Concept: The 3-zone gate catches absent topics deterministically; zero tokens spent on generation.
+
+uv run sb chat
+search the web for beginner scuba diving certification options
+/quit
+# Expected: Cyan "from the web" panel with URLs.
+# Concept: Typed provenance. Web results are explicitly separated from note-grounded memory.
+
+=== SCENE 9: BONUS ABSTENTION ===
+uv run sb ask "what did I write about cryptocurrency?"
+# Expected: Yellow abstention panel.
+# Concept: Proves the abstention gate works reliably across different absent topics.
+
+=== SCENE 10: VOICE INPUT BONUS ===
+uv run sb chat
+/voice
+# Expected: Transcribes spoken words (try: "Note that I need to review the pricing tier tomorrow") and routes as normal text.
+# Concept: Modality is handled entirely in the presentation layer; the core logic is completely untouched.
+/quit

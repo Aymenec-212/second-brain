@@ -136,3 +136,12 @@ class SessionRuntime:
                 payload=dict(payload),
             )
         )
+
+    def record_user_only(self, content: str) -> None:
+        """Persist a user turn to the transcript without generating a reply.
+        Used when a turn's content must be saved but isn't a conversational
+        exchange — e.g. an explicit 'save that' whose message carries the
+        substance."""
+        if self._closed:
+            raise RuntimeError("session is closed")
+        self._append(Role.USER, content)    

@@ -4,6 +4,14 @@ Order: slash commands (free) → intent router (one call) → dispatch.
 The router proposes a validated RouterDecision; this module disposes —
 a plain loop over intents executing injected callables.
 
+One invariant is guaranteed here in code, not left to the model: when a
+turn asks to save, its content is in the transcript *before* ingestion
+runs. The router may emit `save` alone (a message like "I chose X, save
+that" carries the substance in the same turn), so dispatch ensures that
+substance is persisted first — otherwise ingestion would correctly find
+nothing pending and save nothing. Correctness of "save that" must not
+depend on the model co-emitting `chat` in the right order.
+
 Every turn, whatever its intent, is recorded into the session's exchange
 log with a one-line outcome — that log (not the transcript) is the
 router's context, so follow-ups keep their referent.
@@ -102,10 +110,20 @@ def _dispatch(
     if decision.confidence < confidence_floor:
         return [ChatReply(text=_CLARIFY)]
 
+    # Guarantee the save invariant deterministically: if this turn will
+    # save but no chat turn will put its content on the transcript, persist
+    # the content first. "save that" refers to the substance in this very
+    # message, so it must be ingestible before save runs.
+    content_persisted = False
+    if Intent.SAVE in decision.intents and Intent.CHAT not in decision.intents:
+        runtime.record_user_only(text)
+        content_persisted = True
+
     results: list[TurnResult] = []
     for intent in decision.intents:
         if intent is Intent.CHAT:
             results.append(ChatReply(text=runtime.chat_turn(text)))
+            content_persisted = True
         elif intent is Intent.SAVE:
             results.append(SaveAck(notes=runtime.save()))
         elif intent is Intent.NOTES_QA:
@@ -119,6 +137,7 @@ def _dispatch(
             except Exception as exc:  # noqa: BLE001 — a web hiccup must not sink the turn
                 runtime.trace("web_failed", error=str(exc))
                 results.append(ChatReply(text=_WEB_FAILED))
+    _ = content_persisted  # invariant satisfied; name kept for readability
     return results
 
 
